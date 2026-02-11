@@ -1,0 +1,23 @@
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs & temp
+*.log
+*.tmp
+.cache/
+
+# content: test と js/css 以外は管理しない
+/content/*
+!/content/comi_style.css
+!/content/comic.js
+!/content/test/
+!/content/test/**

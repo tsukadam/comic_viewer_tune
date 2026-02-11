@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <link href="../../slick.css" rel="stylesheet">
+    <link href="../images/style.css" rel="stylesheet">
+    <link href="../comi_style.css" rel="stylesheet">
+    <script src="../../jquery-3.6.0.min.js"></script>
+
+    <script>
+/** 入力ここから **/
+        var page = 4; //ページ数
+        var imgtype = "png"; //画像の拡張子
+        var title = "タイトル名"; //タイトル名
+        var site = "サイトアドレス"; //サイトのURL
+        var copy = "作者名"; //作者名
+        var display = 0; //左ページ始まりは「0」、右ページ始まりは「1」
+        /* *ここまで **/
+        
+        $(function(){
+            $("title,h1").text(title);
+            $(".o_button").attr("onClick", "location.href='" + site + "'");
+            $(".copy").text(copy);
+            for(var i=1; i<=page; i++){
+                $('#last_page').before('<div class="c_i"><div><img data-lazy="' + i + '.' + imgtype + '" src="../images/load.gif"></div></div>'); 
+            }
+            
+            /**長すぎるからh1の方のタイトル改行したいって時var/コメントアウト解除して編集**/
+            //$("h1").html("サンプル<br>サンプル");
+             
+        });
+    </script>
+</head>
+<body>
+    <!--漫画表示ゾーンここから-->
+    <div class="slider" dir="rtl">
+        <div id="first_page"></div>
+        <div id="last_page">
+            <div class="last_page_in" dir="ltr">
+                <div>
+                    <!--最終ページフリー追加ゾーンここから-->
+
+                    
+
+                    <!--最終ページフリー追加ゾーンここまで-->
+                </div>
+                <h1></h1>
+                <small>Copyright &copy; <span class="copy"></span> All Rights Reserved</small>
+                <!--最終ページにボタンを追加する場合は以下をコメントアウト解除して編集-->
+                <!--
+                <p>
+                    <a class="button" href="#">次の話へ</a>
+                    <a class="button" href="#">前の話へ</a>
+                </p>
+                -->
+                <p>
+                    <input type="button" value="もう一度読む" class="button b_button">
+                    <input type="button" value="サイトへ戻る" class="button o_button orange">
+                </p>
+            </div>
+        </div>
+    </div>
+    <!--漫画表示ゾーンここまで-->
+
+    <!-- ページバー（バックドロップ）-->
+    <div id="page-bar-overlay" class="page-bar-overlay page-bar-visible">
+        <div class="page-bar-backdrop"></div>
+        <div class="page-bar-box">
+            <div class="slick-counter"><span class="current">1</span> / <span class="total">1P</span></div>
+            <div class="dots"></div>
+        </div>
+    </div>
+    
+    
+    <script src="../../slick.min.mjs"></script>
+    <!-- 斜めスワイプ時にY成分を0扱いにするカスタムSlickパッチ -->
+    <script src="../../slick-swipe-custom.js"></script>
+    <script src="../comic.js"></script>
+</body>
+</html>
