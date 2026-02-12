@@ -1,3 +1,8 @@
+/**
+ * カスタム Slick スワイプ処理（斜めスワイプを横のみ扱う）
+ * Copyright (c) 2026 Kodama Totsuka.
+ * Licensed under the MIT License. See License.txt in the project root.
+ */
 // カスタム Slick スワイプ処理
 // - jQuery プラグイン $.fn.slick をラップして、初期化時に prototype を差し替える
 // - 斜めスワイプでも Y 成分を常に 0 扱い（curY = startY）にして、常に横スワイプとして解釈させる
