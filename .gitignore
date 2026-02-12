@@ -15,6 +15,9 @@ desktop.ini
 *.tmp
 .cache/
 
+# 改造元コード（参照用・一切変更しない。Git管理外）
+/moto/
+
 # content: test と js/css 以外は管理しない
 /content/*
 !/content/comi_style.css
