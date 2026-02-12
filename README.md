@@ -1,6 +1,6 @@
 # comic_viewer_tune
 
-**[なんかいい感じのマンガビューア～slick-custom～](https://guardian.bona.jp/st/cv/)**（G-ra 氏・ver2.1）を自分用に改変したものです。
+**[なんかいい感じのマンガビューア～slick-custom～](https://guardian.bona.jp/st/cv/)**（宮幻ハツ氏・ver2.1）を自分用に改変したものです。
 単ページ表示・見開き表示の動的な切り替えと、スマホ字の操作性向上が中心です。
 
 ---
