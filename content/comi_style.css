@@ -139,14 +139,11 @@ img{
 }
 
 /***矢印**********************************************/
+/* 親 .slide-arrow はタッチ判定用のみ（comic.js で top/height/幅を設定）。表示は ::after で fixed＋画面上下中央に分離。 */
 .slide-arrow{
     opacity: 0;
     z-index: 10; /* ページバー（オーバーレイ）より背面にして、バー表示中はバー側の判定を最優先にする */
-    /* top/height/幅は comic.js で設定（画面上部を除いためくり領域＝上部と排他） */
     height: 100%;
-    line-height: calc(100vh - var(--top-zone-height, 0px));
-    /* 上下中央にしたあと、画面上部ゾーン縦幅の半分だけ上にずらしてスクリーン中央に */
-    transform: translateY(calc(-0.5 * var(--top-zone-height, 0px)));
     width: 35%;
     position: absolute;
     top: 0;
@@ -160,39 +157,34 @@ img{
     opacity: 1;
 }
 .next-arrow{
-    text-align: left;
-    padding-left: 30px;
     left: 0;
 }
 .next-arrow span::before{
     content: '\e902';
 }
 .prev-arrow{
-    text-align: right;
-    padding-right: 30px;
     right: 0;
 }
 .prev-arrow span::before{
     content: '\e903';
 }
-.slide-arrow.slick-disabled{
-    display: none;
-}
-/* 単ページ時のみ：矢印の表示位置をスクリーン端に（判定領域はスライダー基準のまま） */
-.single-page-view .slide-arrow.next-arrow span,
-.single-page-view .slide-arrow.prev-arrow span{
+/* 表示は ::after に一本化するため span は非表示（単ページ・見開き共通） */
+.slide-arrow.next-arrow span,
+.slide-arrow.prev-arrow span{
     visibility: hidden;
 }
-/* 左の矢印＝領域内左寄せ、右の矢印＝領域内右寄せ。top/height で画面上部を除く（上部と排他） */
-.single-page-view .slide-arrow.next-arrow::after{
+/* 無効時は消さず不可視・無反応にしてレイアウトを維持（表示時の位置チラつき防止）。JS でも同様に設定 */
+.slide-arrow.slick-disabled{
+    visibility: hidden;
+    pointer-events: none;
+}
+/* 矢印の見た目：fixed＋top:50% translateY(-50%) で画面の上下中央に固定（判定領域と表示位置を分離） */
+.slide-arrow.next-arrow::after{
     content: '\e902';
     position: fixed;
     left: 0;
-    top: var(--top-zone-height, 0px);
-    height: calc(100vh - var(--top-zone-height, 0px));
-    line-height: calc(100vh - var(--top-zone-height, 0px));
-    /* 上下中央のあと、上部ゾーン縦幅の半分だけ上にずらしてスクリーン中央に */
-    transform: translateY(calc(-0.5 * var(--top-zone-height, 0px)));
+    top: 50%;
+    transform: translateY(-50%);
     width: calc(var(--arrow-zone-pct, 35) * 1%);
     display: flex;
     align-items: center;
@@ -206,14 +198,12 @@ img{
     text-shadow: inherit;
     pointer-events: none;
 }
-.single-page-view .slide-arrow.prev-arrow::after{
+.slide-arrow.prev-arrow::after{
     content: '\e903';
     position: fixed;
     right: 0;
-    top: var(--top-zone-height, 0px);
-    height: calc(100vh - var(--top-zone-height, 0px));
-    line-height: calc(100vh - var(--top-zone-height, 0px));
-    transform: translateY(calc(-0.5 * var(--top-zone-height, 0px)));
+    top: 50%;
+    transform: translateY(-50%);
     width: calc(var(--arrow-zone-pct, 35) * 1%);
     display: flex;
     align-items: center;
@@ -231,9 +221,11 @@ img{
     .slide-arrow{
         font-size: 2em;
     }
-    .next-arrow,.prev-arrow{
-        padding: 0;
-        text-align: center;
+    .slide-arrow.next-arrow::after,
+    .slide-arrow.prev-arrow::after{
+        padding-left: 0;
+        padding-right: 0;
+        justify-content: center;
     }
 }
 
@@ -281,9 +273,6 @@ small{
         color: #F65B5B;
     }
 
-}
-@media all and (-ms-high-contrast: none){/*IEの時*/
-    .g_button{display: none;}
 }
 
 /* 最終ページ用サムネ */
@@ -388,50 +377,7 @@ small{
     background: #cccccc;
 }
 
-/***メニュー**********************************************/
-.menu_box{
-    color: #ccc;
-    background-color: rgba(0,0,0,0.9);
-    z-index: 2;
-    width: 100%;
-    position: fixed;
-    top: 0;
-    text-align: center;
-}
-.menu_show{
-    display: none;
-    margin-bottom: 4px;
-}
-/*メニュー・クローズ*/
-.menu_button{
-    display: block;
-    height: 30px; /*メニューの高さ*/
-    line-height: 28px;
-    width: 100%;
-    font-weight: bold;
-    cursor: pointer;
-    transition: .1s;
-    color: #ccc; /*メニューボタン文字カラー*/
-}
-.menu_button::before{
-    vertical-align: middle;
-    display: inline-block;
-    content: '\e900';
-    font-weight: normal;
-    padding: 0 4px;
-}
-.close{
-    color: #ccc;
-    cursor: pointer;
-    transition: .1s;
-}
-.close::before{
-    content: '\e901';
-}
-/*メニュー内スタイル*/
-.menu_box h1{
-    color: #f0f0f0;
-}
+/***ページバー内（slick-counter / dots はメニュー削除後も使用）**********************************************/
 .slick-counter{
     margin: 22px 0 8px;
 }
@@ -443,191 +389,6 @@ small{
     h1{
         font-size: 1.6em;
     }
-    /*メニュー内ボタン縦並び*/
-    .menu_box .button{
-        display: block;
-        margin: 10px auto;
-    }
-}
-/***メニュータップ範囲拡大用（スマホ時生成）**********************************************/
-.menu_sizeup{
-    width: 100%;
-    height: 50px;
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 10;
 }
 
-/***ガイド**********************************************/
-.guide{
-    z-index: 100;
-    width: 100%;
-    height: 100%;
-    position: fixed;
-    top: 0;
-    left: 0;
-    text-align: center;
-    cursor: pointer;
-    background-color: rgba(0,0,0,0.6);
-    color: #fff;
-    text-shadow: 0 0 10px rgba(0,0,0,0.6);
-}
-.guide::after{
-    box-sizing: border-box;
-    line-height: 1;
-    padding: 8px;
-    font-size: 2em;
-    content: "\e901";
-    color: #fff;
-    text-shadow: none;
-    display: block;
-    background-color: #be0000;
-    position: absolute;
-    top: 0;
-    right: 0;
-    z-index: 100;
-}
-.guide_yazirusi{
-    margin-top: 32px;
-}
-.guide_yazirusi .icon::before{
-    font-size: 5em;
-    content: '\e904';
-}
-.guide_yazirusi .text::before{
-    padding-top: 20px;
-    content: 'メニューバー';
-    font-weight: bold;
-}
-.guide_operation{
-    font-weight: bold;
-    text-align: center;
-    width: 70%;
-    overflow: hidden;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%,-50%);
-}
-.guide_operation img{
-    max-width: 100%;
-    height: auto;
-}
-.guide .slide-arrow,.guide .slide-arrow.hover{
-    opacity: 1;
-}
-
-/***ヘルプ**********************************************/
-.help{
-    display: none;
-    background-color: rgba(0,0,0,0.9);
-    z-index: 100;
-    width: 100%;
-    height: 100%;
-    position: fixed;
-    top: 0;
-    left: 0;
-    text-align: center;
-    cursor: pointer;
-}
-.help_in{
-    width: 80%;
-    border: 3px solid #be0000;
-    color: #fff;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%,-50%);
-    box-sizing: border-box;
-}
-.help_in p{
-    margin-bottom: 0;
-    margin-top: 4px;
-}
-.help_in p:nth-of-type(1){
-    margin-top: 16px;
-}
-.help_in ul{
-    display: inline-block;
-    text-align: left;
-    list-style-type: none;
-    padding-left: 0;
-    margin-top: 8px;
-}
-.help_in li{
-    margin-bottom: 4px;
-}
-.help_in li:last-child{
-    margin-bottom: 0;
-}
-.help_img{
-    margin-top: 20px;
-    text-align: center;
-}
-.help_img img{
-    max-width: 100%;
-}
-.help::after{
-    box-sizing: border-box;
-    line-height: 1;
-    padding: 8px;
-    font-size: 2em;
-    content: "\e901";
-    color: #fff;
-    display: block;
-    background-color: #be0000;
-    position: absolute;
-    top: 0;
-    right: 0;
-    z-index: 100;
-}
-@media (max-width:768px) {/*指定幅以下になった時*/
-    .help_in span{
-        display: block;
-        padding-left: 1em;
-    }
-    .help_in li{
-        margin-bottom: 8px;
-    }
-}
-
-/***拡大モード**********************************************/
-.slider.zoom{
-    width: 100vw;
-    transform: scale(1.5);
-    transform-origin: 0 0;
-}
-.zoomwrap{
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 20;
-    -webkit-overflow-style:move;
-}
-.zoom_reset{
-    display: none;
-    width: 100%;
-    cursor: pointer;
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 21;
-}
-.zoom_reset .zr_in{
-    background-color: #be0000;
-    height: 30px;
-    line-height: 30px;
-    color: #fff;
-    font-weight: bold;
-    text-align: center;
-    box-sizing: border-box;
-}
-@media (max-width:768px) {/*指定幅以下になった時*/
-    .zoom_reset{
-        height: 50px; /*タップ範囲拡大用*/
-    }
-}
+/* ガイド・ヘルプ・拡大モード・メニュー・全画面は未使用のため削除済み（元ファイルに残っているので必要なら復活可） */

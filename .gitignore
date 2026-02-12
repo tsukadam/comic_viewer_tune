@@ -18,9 +18,11 @@ desktop.ini
 # 改造元コード（参照用・一切変更しない。Git管理外）
 /moto/
 
-# content: test と js/css 以外は管理しない
+# content: test / images / js/css は管理する。作品フォルダは管理しない
 /content/*
 !/content/comi_style.css
 !/content/comic.js
+!/content/images/
+!/content/images/**
 !/content/test/
 !/content/test/**
