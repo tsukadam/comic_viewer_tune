@@ -56,18 +56,24 @@ $(function(){
 
     // タップ/クリック反応領域の定義（排他）。数値はここだけ。上部・めくり左右・中央。
     var PAGE_BAR_CONFIG = {
-        topZoneY: 100,               // 上部：横＝画面幅、縦＝この値（px）。バー表示時に実測で上書き
-        breakpointWidth: BREAKPOINT_PX, // この幅以下で edgeZoneNarrow（単ページ）、超で edgeZoneWide（見開き）
-        edgeZoneNarrow: 0.35,        // めくり左右幅（割合）。単ページ時
-        edgeZoneWide: 0.35,          // めくり左右幅（割合）。見開き時。中央＝残差
-        initialShowMs: 1200,         // 初回表示後、この時間でバーを自動非表示にする（ms）
+        topZoneY: 100,               // 上部バーの縦幅。表示時に実測で上書き
+        breakpointWidth: BREAKPOINT_PX, // この幅以下で単ページ表示、超えたら見開き表示
+        edgeZoneNarrow: 0.35,        // めくりタップ領域の左右幅（割合）。単ページ時
+        edgeZoneWide: 0.35,          // めくりタップ領域の左右幅（割合）。見開き時
+        initialShowMs: 1200,         // 初回表示後、この時間でバーを非表示にする（ms）
         idleHideMs: 4000,            // バー表示中の無操作で非表示にするまでの時間（ms）
-        afterNavHideMs: 1800,        // ドットでページ遷移後にバーを非表示にするまでの時間（ms）
-        swipeCheckDelayMs: 150,      // タッチで「スワイプかタップか」を判定する待ち時間（ms）
-        fadeInDurationMs: 350,       // バー表示時のフェード時間（ms）
-        fadeOutDurationMs: 800,      // バー非表示時のフェード時間（ms）
-        initialFadeOutDurationMs: 1000,  // 初回のみのフェードアウト時間（ms）
+        afterNavHideMs: 1800,        // ドットでページ遷移後にバーを非表示にするまでの時間。続けて操作するかもしれないので少しだけ待つ（ms）
+        swipeCheckDelayMs: 150,      // タッチがこの秒数以下ならタップ、超えたらスワイプと判定（ms）
+        fadeInDurationMs: 350,       // バーのフェードイン時間（ms）
+        fadeOutDurationMs: 800,      // バーのフェードアウト時間（ms）
+        initialFadeOutDurationMs: 1000,  // バーの初回フェードアウト時間（ms）
         tapFlagResetMs: 400          // 表示/非表示タップ直後のフラグリセット待ち（ms）
+    };
+    // ピンチ拡大時に外にはみ出ないようにするクランプ挙動（遊び量・抵抗・スナップ復帰）
+    var PINCH_PAN_CONFIG = {
+        clampMaxOverPx: 80,          // クランプ範囲外に許容する遊び幅（px）
+        clampResistance: 0.3,        // 範囲外に出るほど抵抗をかける係数（0〜1）
+        snapBackDurationMs: 200      // 指を離した後に範囲内へ戻す時間（ms）
     };
     var $pageBarOverlay = $('#page-bar-overlay');
     var $body = $('body');
@@ -86,7 +92,7 @@ $(function(){
         return w <= PAGE_BAR_CONFIG.breakpointWidth ? PAGE_BAR_CONFIG.edgeZoneNarrow : PAGE_BAR_CONFIG.edgeZoneWide;
     }
     function getTopZoneHeight() { return pageBarCachedHeight || PAGE_BAR_CONFIG.topZoneY; }
-    /** 反応領域を排他に判定。'top'|'left'|'right'|'center'。矢印・ホバー・タップで同じ領域。'left'/'right'＝めくり領域（端タップ領域と同じ）。 */
+    /** 反応領域を排他に判定。'top'|'left'|'right'|'center'。矢印・ホバー・タップで同じ領域。'left'/'right'＝めくり領域 */
     function getTapZone(clientX, clientY) {
         if (clientY < getTopZoneHeight()) return 'top';
         var rect = $slider[0] && $slider[0].getBoundingClientRect();
@@ -193,7 +199,7 @@ $(function(){
             $('.slide-arrow').css({ width: zonePct + '%', top: topH + 'px', height: 'calc(100% - ' + topH + 'px)' });
             $('.slide-arrow.slick-disabled').css({ visibility: 'hidden', pointerEvents: 'none' });
             $('.slide-arrow:not(.slick-disabled)').css('visibility', 'visible');
-            // 矢印は常に pointer-events: none（PC でアロー起点のドラッグ＝スワイプを可能にする。クリック／ホバーは別経路で処理）
+            // 矢印は常に pointer-events: none(イベントはここに書かない)
             $('.slide-arrow').css('pointer-events', 'none');
             var rect = $slider[0] && $slider[0].getBoundingClientRect();
             var arrowAreaH = (rect && rect.height > 0) ? Math.max(0, rect.height - topH) : 0;
@@ -232,8 +238,8 @@ $(function(){
 
     function isLastPageInteractive(el) { return el && $(el).closest('#last_page').length && $(el).closest('a, button, input').length; }
     var pageBarJustShownByTap = false;  // 表示させるタップで出した直後は、そのタップがバーに届いても遷移させない
-    var pageBarJustHiddenByTap = false; // 消すタップ直後の click/touch が「出す」側に奪われないようにする
-    var pageBarTransitioning = false;   // フェード中ロック用（主に消える側）
+    var pageBarJustHiddenByTap = false; // 消すタップ直後のタップが表示させるタップに奪われないようにする
+    var pageBarTransitioning = false;   // フェード中に操作をロックする用
     function schedulePageBarHide(delayMs) {
         if (pageBarHideTimer) clearTimeout(pageBarHideTimer);
         var delay = (delayMs === undefined) ? PAGE_BAR_CONFIG.idleHideMs : delayMs;
@@ -280,7 +286,7 @@ $(function(){
         setTimeout(function() {
             if (pageBarTransitioning) return;
             pageBarTransitioning = true;
-            pageBarCachedHeight = $pageBarOverlay.outerHeight(); // 上部ゾーン高さ＝バックドロップ縦幅
+            pageBarCachedHeight = $pageBarOverlay.outerHeight(); 
             $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.initialFadeOutDurationMs / 1000) + 's');
             $pageBarOverlay.removeClass('page-bar-visible');
             $body.removeClass('page-bar-open');
@@ -301,7 +307,7 @@ $(function(){
             e.stopPropagation();
             schedulePageBarHide();
         });
-        // 表示させるタップで出した直後は、そのタップ（または続くclick）がバー内に届いても遷移しないよう吸収する
+        // 表示させるタップで出した直後は、そのタップがバー内に届いても遷移しないよう吸収する
         $pageBarOverlay[0].addEventListener('click', function(e) {
             if (pageBarJustShownByTap && $(e.target).closest('.page-bar-box').length) {
                 e.preventDefault();
@@ -316,7 +322,6 @@ $(function(){
                 pageBarJustShownByTap = false;
             }
         }, true);
-        // バー内のドットでページ遷移したら2秒で消す。遷移中に別のドットをタップしたらそのページへ遷移し直す（Slickが処理）
         $slider.on('afterChange.pageBar', function(event, slick, currentSlide) {
             if ($pageBarOverlay.hasClass('page-bar-visible')) {
                 schedulePageBarHide(PAGE_BAR_CONFIG.afterNavHideMs);
@@ -327,8 +332,6 @@ $(function(){
     }
 
 //***動作設定***
-    // 先頭の戻る矢印・末尾の進む矢印の非表示は setPosition 内で .slick-disabled の style を外して CSS に任せている
-
     //もう一度読むボタン
     $(".b_button").on('click', function(e){
         e.preventDefault();
@@ -336,8 +339,6 @@ $(function(){
         var targetIndex = ($("#first_page").length > 0) ? 1 : 0;
         try { $slider.slick('slickGoTo', targetIndex); } catch(err) {}
     });
-    
-    // 操作ヘルプ・初期ガイドは現在未使用のため何もしない（JS側からも出さない）
 
 //***キーボード操作***
     $(document).keydown(function(e) {
@@ -352,9 +353,6 @@ $(function(){
     if(agent.search(/iPhone/) != -1 || agent.search(/iPad/) != -1 || agent.search(/iPod/) != -1 || agent.search(/Android/) != -1 || (agent.search(/Macintosh/) != -1 && 'ontouchend' in document)){
         //***スマホ・タブレット時***
         $(".sp_none").hide();
-
-        // 矢印の pointer-events: none は setPosition で全端末に適用済み。アロー領域のタッチも .slider に届き「一定以下＝タップ、それ以上＝スワイプ」がそのまま効く。
-        // 端タップ（前後送り）＝めくり領域タップ。＆ピンチ用の座標
         var edgeTapStartX = 0, edgeTapStartY = 0;
         var pinchActive = false;
         var pinchStartDist = 0;
@@ -516,7 +514,7 @@ $(function(){
                     $(animObj).stop().animate(
                         { tx: targetX, ty: targetY },
                         {
-                            duration: 200,
+                        duration: PINCH_PAN_CONFIG.snapBackDurationMs,
                             easing: "swing",
                             step: function(now, fx) {
                                 if (fx.prop === "tx") {
@@ -539,7 +537,7 @@ $(function(){
                 }
             }
 
-            // 単指で「一定以下ならタップ・それ以外はスワイプ」：移動量 10px 未満ならめくりタップ（左/右で前後送り）。アロー領域も同じ（タッチは .slider に届いているためここに一本化）
+            // 単指で「一定以下ならタップ・それ以外はスワイプ」：移動量 10px 未満ならめくりタップ（左/右で前後送り）
             if (!pinchZoomMode && pinchScale <= pinchMinScale + 0.01 &&
                 changed.length === 1 && (!touches || touches.length === 0)) {
                 if (isLastPageInteractive(e.target)) return;
@@ -564,24 +562,24 @@ $(function(){
                     var proposedX = panStartTX + dx;
                     var proposedY = panStartTY + dy;
                     var b = getPinchTranslateBounds();
-                    var maxOver = 80; // クランプ範囲の外には最大80pxまで「遊び」を許す
+                    var maxOver = PINCH_PAN_CONFIG.clampMaxOverPx; // クランプ範囲外の「遊び」
                     // X方向：範囲内ならそのまま、外なら抵抗をかけつつ少しだけはみ出させる
                     if (proposedX < b.txMin) {
                         var overLeft = b.txMin - proposedX;
-                        pinchTranslateX = b.txMin - Math.min(maxOver, overLeft) * 0.3;
+                        pinchTranslateX = b.txMin - Math.min(maxOver, overLeft) * PINCH_PAN_CONFIG.clampResistance;
                     } else if (proposedX > b.txMax) {
                         var overRight = proposedX - b.txMax;
-                        pinchTranslateX = b.txMax + Math.min(maxOver, overRight) * 0.3;
+                        pinchTranslateX = b.txMax + Math.min(maxOver, overRight) * PINCH_PAN_CONFIG.clampResistance;
                     } else {
                         pinchTranslateX = proposedX;
                     }
                     // Y方向も同様
                     if (proposedY < b.tyMin) {
                         var overTop = b.tyMin - proposedY;
-                        pinchTranslateY = b.tyMin - Math.min(maxOver, overTop) * 0.3;
+                        pinchTranslateY = b.tyMin - Math.min(maxOver, overTop) * PINCH_PAN_CONFIG.clampResistance;
                     } else if (proposedY > b.tyMax) {
                         var overBottom = proposedY - b.tyMax;
-                        pinchTranslateY = b.tyMax + Math.min(maxOver, overBottom) * 0.3;
+                        pinchTranslateY = b.tyMax + Math.min(maxOver, overBottom) * PINCH_PAN_CONFIG.clampResistance;
                     } else {
                         pinchTranslateY = proposedY;
                     }
@@ -595,7 +593,7 @@ $(function(){
             }, { passive: false });
         });
 
-        // バー表示タップ：反応領域は getTapZone で排他（上部・左めくり・右めくり・中央）
+        // バー表示タップ
         if ($pageBarOverlay.length) {
             $(document).on('touchstart.pageBar', function(e) {
                 if (isLastPageInteractive(e.target)) return;
@@ -649,7 +647,6 @@ $(function(){
     } else {
         $(".pc_none").hide();
 
-        // 画面上部（getTapZone で 'top'）はめくりと排他。矢印上クリックでもバーを出す
         if ($pageBarOverlay.length) {
             document.addEventListener('click', function(e) {
                 if (isLastPageInteractive(e.target)) return;
@@ -662,7 +659,7 @@ $(function(){
             }, true);
             $(document).on('click.pageBar', function(e) {
                 if (isLastPageInteractive(e.target)) return;
-                // スライダー内でページバー外のクリック：めくり領域なら前後送り（矢印は pointer-events: none なのでクリックはここで処理）
+                // めくり領域へのタップ・クリックで前後送り（矢印は pointer-events: none なのでここで処理）
                 if ($(e.target).closest('.slider').length && !$(e.target).closest('.page-bar-overlay').length) {
                     var z = getTapZone(e.clientX, e.clientY);
                     if (z === 'left') { $slider.slick('slickNext'); return; }
