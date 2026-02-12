@@ -330,8 +330,11 @@ $(function(){
     // 先頭の戻る矢印・末尾の進む矢印の非表示は setPosition 内で .slick-disabled の style を外して CSS に任せている
 
     //もう一度読むボタン
-    $(".b_button").click(function(){
-        $slider.slick('slickGoTo',0);
+    $(".b_button").on('click', function(e){
+        e.preventDefault();
+        // 見開き表示で first_page（空の調整ページ）がある場合、実際の1ページ目は index 1
+        var targetIndex = ($("#first_page").length > 0) ? 1 : 0;
+        try { $slider.slick('slickGoTo', targetIndex); } catch(err) {}
     });
     
     // 操作ヘルプ・初期ガイドは現在未使用のため何もしない（JS側からも出さない）
