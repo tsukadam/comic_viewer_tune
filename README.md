@@ -37,4 +37,4 @@
 - **jQuery**: [jQuery](https://jquery.com/)（MIT）
 - **Slick**: [kenwheeler/slick](https://github.com/kenwheeler/slick)（MIT）
 
-本リポジトリの改変部分もMITライセンスとします。License.txtを参照してください。
+本リポジトリの改変部分もMITライセンスとします。詳細は content/comic.js 末尾のライセンス記述を参照してください。
