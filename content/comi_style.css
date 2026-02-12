@@ -190,7 +190,7 @@ img{
     align-items: center;
     justify-content: flex-start;
     direction: ltr;
-    padding-left: 30px;
+    padding-left: var(--arrow-visual-edge-padding, 30px);
     box-sizing: border-box;
     color: inherit;
     font-size: inherit;
@@ -209,7 +209,7 @@ img{
     align-items: center;
     justify-content: flex-end;
     direction: ltr;
-    padding-right: 30px;
+    padding-right: var(--arrow-visual-edge-padding, 30px);
     box-sizing: border-box;
     color: inherit;
     font-size: inherit;
@@ -220,12 +220,6 @@ img{
 @media (max-width:768px) {/*指定幅以下になった時*/
     .slide-arrow{
         font-size: 2em;
-    }
-    .slide-arrow.next-arrow::after,
-    .slide-arrow.prev-arrow::after{
-        padding-left: 0;
-        padding-right: 0;
-        justify-content: center;
     }
 }
 

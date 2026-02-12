@@ -75,6 +75,16 @@ $(function(){
         clampResistance: 0.3,        // 範囲外に出るほど抵抗をかける係数（0〜1）
         snapBackDurationMs: 200      // 指を離した後に範囲内へ戻す時間（ms）
     };
+    // 矢印表示位置（端からの距離）
+    var ARROW_VISUAL_CONFIG = {
+        edgePaddingSinglePx: 12,     // 単ページ時：画面端からの距離（px）
+        edgePaddingWidePx: 30        // 見開き時：画面端からの距離（px）
+    };
+    // マウスホイール（クリックによるドラッグ/スワイプとは別）のページ送り調整
+    var WHEEL_NAV_CONFIG = {
+        thresholdY: 40,             // この量（累積）を超えたらページ送り
+        cooldownMs: 250             // 連続送り抑止（ms）
+    };
     var $pageBarOverlay = $('#page-bar-overlay');
     var $body = $('body');
     var pageBarHideTimer = null;
@@ -193,7 +203,7 @@ $(function(){
         }
 
         // めくり領域＝矢印の幅・位置。setPosition は Slick 初期化後に必ず呼ばれるため、getEdgeZoneForBar / getTopZoneHeight は本ファイルの定義順で常に利用可能（フォールバック不要）
-        $slider.on('setPosition', function(event, slick) {
+        $slider.off('setPosition.zone').on('setPosition.zone', function(event, slick) {
             var zonePct = getEdgeZoneForBar() * 100;
             var topH = getTopZoneHeight();
             $('.slide-arrow').css({ width: zonePct + '%', top: topH + 'px', height: 'calc(100% - ' + topH + 'px)' });
@@ -203,10 +213,12 @@ $(function(){
             $('.slide-arrow').css('pointer-events', 'none');
             var rect = $slider[0] && $slider[0].getBoundingClientRect();
             var arrowAreaH = (rect && rect.height > 0) ? Math.max(0, rect.height - topH) : 0;
+            var edgePad = $body.hasClass('single-page-view') ? ARROW_VISUAL_CONFIG.edgePaddingSinglePx : ARROW_VISUAL_CONFIG.edgePaddingWidePx;
             $('body').css({
                 '--arrow-zone-pct': zonePct,
                 '--top-zone-height': topH + 'px',
-                '--arrow-area-height': (arrowAreaH > 0 ? arrowAreaH + 'px' : 'calc(100vh - var(--top-zone-height, 0px))')
+                '--arrow-area-height': (arrowAreaH > 0 ? arrowAreaH + 'px' : 'calc(100vh - var(--top-zone-height, 0px))'),
+                '--arrow-visual-edge-padding': edgePad + 'px'
             });
             $('.current').text(slick.currentSlide + 1);
             if(display === 1){ //右ページ始まりの時
@@ -215,15 +227,23 @@ $(function(){
                 $('.total').text(slick.slideCount - total_minus);
             }  
         });
-        $slider.on('beforeChange', function(event, slick, currentSlide, nextSlide) {
+        $slider.off('beforeChange.zone').on('beforeChange.zone', function(event, slick, currentSlide, nextSlide) {
             $('.current').text(nextSlide + 1);
         });
     }
  
     sliderSetting();
     
-    $(window).resize( function() {
-        sliderSetting();
+    // リサイズ時は「単ページ⇔見開き」が切り替わる時だけ再初期化。通常は setPosition のみ（パフォーマンス改善）。
+    var lastIsSinglePage = (($(window).width() <= BREAKPOINT_PX) || isMobileDevice);
+    $(window).on('resize', function() {
+        var nowIsSinglePage = (($(window).width() <= BREAKPOINT_PX) || isMobileDevice);
+        if (nowIsSinglePage !== lastIsSinglePage) {
+            lastIsSinglePage = nowIsSinglePage;
+            sliderSetting();
+        } else {
+            try { $slider.slick('setPosition'); } catch(err) {}
+        }
     });
 
     // 矢印ホバー：矢印は pointer-events: none のため、document の mousemove で getTapZone から .hover を付ける（PC のみ）
@@ -348,6 +368,36 @@ $(function(){
             $slider.slick('slickNext');
         }
     });
+
+//***マウスホイール操作（ページ送り）***
+    // 判定領域（getTapZone）とは独立。ホイールは PC 操作補助として、一定量以上で1ページだけ送る。
+    if (!isTouchDevice) {
+        var wheelNavLocked = false;
+        var wheelNavAccY = 0;
+        document.addEventListener('wheel', function(e) {
+            if (wheelNavLocked) return;
+            if (!e.target) return;
+            if (!$(e.target).closest('.slider').length) return;
+            if ($(e.target).closest('.page-bar-overlay').length) return;
+            if (isLastPageInteractive(e.target)) return;
+
+            // 横スクロール（トラックパッド）っぽい場合は無視
+            if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
+
+            wheelNavAccY += e.deltaY;
+            if (Math.abs(wheelNavAccY) < WHEEL_NAV_CONFIG.thresholdY) return;
+
+            e.preventDefault();
+            var forward = wheelNavAccY > 0;
+            wheelNavAccY = 0;
+            wheelNavLocked = true;
+            setTimeout(function() { wheelNavLocked = false; }, WHEEL_NAV_CONFIG.cooldownMs);
+
+            // 下方向スクロール＝次ページ（進む）に統一
+            if (forward) $slider.slick('slickNext');
+            else $slider.slick('slickPrev');
+        }, { passive: false });
+    }
 
 //***端末別処理***
     if(agent.search(/iPhone/) != -1 || agent.search(/iPad/) != -1 || agent.search(/iPod/) != -1 || agent.search(/Android/) != -1 || (agent.search(/Macintosh/) != -1 && 'ontouchend' in document)){
@@ -687,7 +737,7 @@ $(function(){
 });
 
 /*
-This repository contains code from multiple authors. Each retains their own
+This project contains code from multiple authors. Each retains their own
 copyright.
 
 The components below are each licensed under the MIT License:
@@ -696,7 +746,7 @@ The components below are each licensed under the MIT License:
     See the /***slick-custom*** block below in this file.
   - jQuery — MIT. See jquery-3.6.0.min.js header or jquery.org/license.
   - Slick — MIT. See slick.min.js / slick.css headers or github.com/kenwheeler/slick.
-  - Modifications and additional code in this repository — MIT.
+  - Modifications and additional code in this project — MIT.
     Copyright (c) 2026 Kodama Totsuka.
     MIT full text in this file below.
 
