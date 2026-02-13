@@ -36,11 +36,11 @@
 
 ## Adsense広告の貼り方
 
-1. index.htmlの<!--Google Adsenseを使いたい場合は↓のコメントアウト解除--> に次の行のコメントアウトを解除する
-2. <!-- Google AdSenseコード追加ゾーンここから --> の次のゾーンに広告表示コードを貼る
-3. フリー追加ゾーンの付近の<div class="ad-spacer"></div>内に広告が表示されます（スクリーンの横幅が足りない時は出ない）
+1. index.htmlの```<!--Google Adsenseを使いたい場合は↓のコメントアウト解除-->``` に次の行のコメントアウトを解除する
+2. ```<!-- Google AdSenseコード追加ゾーンここから -->``` の次のゾーンに広告表示コードを貼る
+3. フリー追加ゾーンの付近の```<div class="ad-spacer"></div>```内に広告が表示されます（スクリーンの横幅が足りない時は出ない）
 
-- 2に<script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js">が含まれている時は、そこを除いて貼って下さい。重複不可かつロード後にフラグを立てる必要があるので、1で読み込んでいます。
+- 2に```<script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js">```が含まれている時は、そこを除いて貼って下さい。重複不可かつロード後にフラグを立てる必要があるので、1で読み込んでいます。
 - サンプルではダミーの広告表示コードが書いてあります。それと同じタイプのコードのみ動作確認しています
 
 ---
