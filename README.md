@@ -38,7 +38,18 @@
 
 ---
 
+## 含まれるライブラリ
+
+- jQuery 3.6.0
+- Slick 1.9.0
+
+これらのライブラリは動作確認済みのバージョンを含んでいます。
+互換性のため、CDNではなくローカルファイルを使用しています。
+
+---
+
 ## ライセンス
+
 - **改変元**: [なんかいい感じのマンガビューア～slick-custom～](https://guardian.bona.jp/st/cv/)（MIT）
 - **jQuery**: [jQuery](https://jquery.com/)（MIT）
 - **Slick**: [kenwheeler/slick](https://github.com/kenwheeler/slick)（MIT）
