@@ -33,6 +33,9 @@ img{
 }
 
 /***メイン画像部分**********************************************/
+/* 縦センタリング用に .slider 配下の div を 100% 高さにしておく。
+ * ※ AdSense 表示時に縦幅が壊れる原因調査のため、広告注入DOMにも効く状態にしている。
+ */
 .slider div{
     height: 100%;
 }
@@ -61,8 +64,9 @@ img{
     flex-direction: column;
     justify-content: center;
     align-items: center;
+    height: 100% !important;  /* index 等で height:auto !important がかかることがあるため上書き（親は #last_page） */
 }
-.slider div .last_page_in div{
+.slider div .last_page_in > div{
     height: auto;
     width: 100%;
     max-width: 100%;
@@ -73,6 +77,8 @@ img{
 }
 /* 広告用コンテナ */
 .slider div .last_page_in .ad-container{
+    /* last_page_in 周辺が flex を多用するため、広告スロットの親が flex になって潰れないよう固定する */
+    display: block;
     width: 100%;
     margin: 0 auto;
 }

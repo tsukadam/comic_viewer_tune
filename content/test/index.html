@@ -42,6 +42,9 @@
                 <div>
                     <!--最終ページフリー追加ゾーンここから-->
 
+                    <!-- Adsense広告（表示完了後に staging からここに移動。実験: 再検知の有無を確認） -->
+                    <div class="ad-container"></div>
+                    
                     
 
                     <!--最終ページフリー追加ゾーンここまで-->
@@ -72,6 +75,16 @@
             <div class="dots"></div>
         </div>
     </div>    
+    
+    <!-- AdSense 仮置き（スライダー外で描画し、done 後に #last_page .ad-container へ移動） -->
+    <div id="adsense-staging" aria-hidden="true" style="position:absolute;left:9999px;top:9999px;width:320px;height:280px;overflow:hidden;visibility:hidden;">
+        <ins class="adsbygoogle" style="display:block"
+             data-ad-client="ca-pub-9668516109348519"
+             data-ad-slot="1397168732"
+             data-ad-format="auto"></ins>
+    </div>
+    <!-- Google AdSense (load once per page) -->
+    <script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js" onload="window.__adsenseScriptLoaded = true;"></script>
     
     <script src="../../slick.min.mjs"></script>
     <!-- 斜めスワイプ時にY成分を0扱いにするカスタムSlickパッチ -->

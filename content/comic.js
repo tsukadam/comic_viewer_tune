@@ -77,7 +77,7 @@ $(function(){
     };
     // 矢印表示位置（端からの距離）
     var ARROW_VISUAL_CONFIG = {
-        edgePaddingSinglePx: 12,     // 単ページ時：画面端からの距離（px）
+        edgePaddingSinglePx: 20,     // 単ページ時：画面端からの距離（px）
         edgePaddingWidePx: 30        // 見開き時：画面端からの距離（px）
     };
     // マウスホイール（クリックによるドラッグ/スワイプとは別）のページ送り調整
@@ -85,11 +85,231 @@ $(function(){
         thresholdY: 40,             // この量（累積）を超えたらページ送り
         cooldownMs: 250             // 連続送り抑止（ms）
     };
+    // AdSense（最終ページ）表示制御：push は「最終ページが表示されたタイミング」で1回だけ。幅0なら短くリトライ。
+    var ADSENSE_CONFIG = {
+        enabled: true,
+        debug: true,                // デバッグ用ログ（本番では false 推奨）
+        minContainerWidthPx: 10,    // これ未満なら width0 相当としてリトライ
+        retryDelayMs: 250,
+        maxAttempts: 12
+    };
     var $pageBarOverlay = $('#page-bar-overlay');
     var $body = $('body');
     var pageBarHideTimer = null;
     var pageBarTouchStartSlide = null;
     var pageBarCachedHeight = 0;
+    var adsenseRetryTimer = null;
+    var adsenseResizeTimer = null;  // リサイズ debounce 用。
+    var adsenseRetryCount = 0;
+    var adsenseLastSlideIndex = -1;  // 実際にスライドが変わった時だけ schedule するための前回インデックス
+    var adsensePositionedOnce = false; // 初回位置合わせを rAF でやり直したか
+    var adsenseStagingWidthBeforePush = 0; // push 前に ensureStagingSize で設定した幅（x-2a）。push 後再適用。表示判定はコンテナ幅 >= この値で行う
+    var ADSENSE_STAGING_WIDTH_BUFFER_PX = 10; // 左右5px。アドセンスに渡す幅だけ x-2a にし、それ以下の広告が来るので閾値は不要
+
+    function clearAdsenseRetry() {
+        if (adsenseRetryTimer) { clearTimeout(adsenseRetryTimer); adsenseRetryTimer = null; }
+        adsenseRetryCount = 0;
+    }
+    /** ins はまず #adsense-staging にあり、表示完了後に #last_page .ad-container へ移動する。staging 優先で取得。 */
+    function getAdsenseIns() {
+        var staging = document.getElementById('adsense-staging');
+        if (staging) {
+            var ins = staging.querySelector('ins.adsbygoogle');
+            if (ins) return ins;
+        }
+        return document.querySelector('#last_page ins.adsbygoogle');
+    }
+    /** 仮置き用 staging の幅を .last_page_in の横幅から左右5pxバッファを引いた値にする。push 前に呼ぶ。 */
+    function ensureStagingSize() {
+        var staging = document.getElementById('adsense-staging');
+        if (!staging) return;
+        var lastPage = document.getElementById('last_page');
+        var lastPageIn = document.querySelector('#last_page .last_page_in');
+        var w = lastPageIn ? lastPageIn.getBoundingClientRect().width : 0;
+        var lastPageW = lastPage ? lastPage.getBoundingClientRect().width : 0;
+        // 読み込み時：参照元の値
+        console.log('[adsense-width] 読み込み時', { lastPageInW: w, lastPageW: lastPageW });
+        if (lastPageW && w && Math.abs(w - lastPageW) < 2) w = Math.round(lastPageW * 0.8);
+        if (w && w > 0) w = Math.max(320, Math.round(w) - ADSENSE_STAGING_WIDTH_BUFFER_PX);
+        else w = 320;
+        staging.style.width = w + 'px';
+        staging.style.height = '280px';
+        adsenseStagingWidthBeforePush = w;
+        // アドセンスに渡す時：staging に設定した幅
+        console.log('[adsense-width] アドセンスに渡す時', { stagingWidth: w });
+    }
+    /** 画面外の座標（子が visible だと親の visibility が効かないため、非表示は位置で行う）。 */
+    var ADSENSE_STAGING_OFFSCREEN = '9999px';
+    /** staging の縦幅を ad-container に転写してレイアウトを確保してから、ad-container の位置に staging を重ねる。staging 内はセンタリング。
+     * staging の親は body だが、left/top/width/height を ad-container.getBoundingClientRect() で与えているだけなので、
+     * 「左ページのパディングに合わせて見える」のは親の overflow ではなく、その rect がすでに last_page_in の margin 等を含んだ領域だから。 */
+    function positionStagingOverAdContainer() {
+        var container = document.querySelector('#last_page .ad-container');
+        var staging = document.getElementById('adsense-staging');
+        if (!container || !staging) return;
+        var stagingH = staging.offsetHeight || staging.getBoundingClientRect().height || 280;
+        container.style.minHeight = stagingH + 'px';
+        var rect = container.getBoundingClientRect();
+        staging.style.position = 'fixed';
+        staging.style.left = rect.left + 'px';
+        staging.style.top = rect.top + 'px';
+        staging.style.width = rect.width + 'px';
+        staging.style.height = rect.height + 'px';
+        staging.style.zIndex = '10';
+        staging.style.display = 'flex';
+        staging.style.justifyContent = 'center';
+        staging.style.alignItems = 'center';
+        adsenseDebugLog('staging positioned over ad-container');
+    }
+    /** 最終ページがアクティブかつ コンテナ幅 >= staging幅 なら表示。渡す幅を x-2a にしているのでそれ以下の広告が来る。それ以外は画面外に移す。 */
+    function updateStagingVisibility() {
+        var staging = document.getElementById('adsense-staging');
+        if (!staging) return;
+        var container = document.querySelector('#last_page .ad-container');
+        try {
+            var slick = $slider.slick('getSlick');
+            var ins = getAdsenseIns();
+            var onLast = isLastPageVisible(slick);
+            var adReady = ins && isAdsenseRendered(ins) && ins.closest('#adsense-staging');
+            var containerW = container ? container.getBoundingClientRect().width : 0;
+            var stagingW = adsenseStagingWidthBeforePush > 0 ? adsenseStagingWidthBeforePush : (staging.getBoundingClientRect().width || 200);
+            var wideEnough = containerW >= stagingW;
+            console.log('[adsense-width] 幅の比較', { containerW: containerW, stagingW: stagingW, wideEnough: wideEnough });
+            var showOnContainer = onLast && adReady && wideEnough;
+            console.log('[adsense-width] 広告表示判定', { onLast: onLast, adReady: adReady, wideEnough: wideEnough, containerW: containerW, stagingW: stagingW, 表示する: showOnContainer });
+            if (showOnContainer) {
+                positionStagingOverAdContainer();
+            } else {
+                staging.style.position = 'fixed';
+                staging.style.left = ADSENSE_STAGING_OFFSCREEN;
+                staging.style.top = ADSENSE_STAGING_OFFSCREEN;
+                // 広告未読込時は minHeight を 0 に。読込済みで最終ページだが幅不足で非表示にした時も 0 に（コンテナを小さくする）
+                if (container && (!adReady || (onLast && !wideEnough))) container.style.minHeight = '0';
+            }
+        } catch (e) {
+            staging.style.position = 'fixed';
+            staging.style.left = ADSENSE_STAGING_OFFSCREEN;
+            staging.style.top = ADSENSE_STAGING_OFFSCREEN;
+            if (container) container.style.minHeight = '0';
+        }
+    }
+    /** ins の data-adsbygoogle-status が "done" になったら広告幅を記録し、表示は updateStagingVisibility（最終ページのときだけ ad-container 位置に出す）。初回は rAF で位置をやり直す。 */
+    function observeAdsenseDoneThenMove(ins) {
+        if (!ins) return;
+        var staging = document.getElementById('adsense-staging');
+        function doPosition() {
+            if (!staging) return;
+            // push 前に設定した幅を再適用（AdSense が staging の幅を変えることがあるため）
+            if (adsenseStagingWidthBeforePush > 0) {
+                staging.style.width = adsenseStagingWidthBeforePush + 'px';
+                staging.style.height = '280px';
+            }
+            // push 完了時点で ad-container の高さを入れておく（最終ページを開いた時に一瞬サイズ0が見えないように）
+            var container = document.querySelector('#last_page .ad-container');
+            if (container) {
+                var stagingH = staging.offsetHeight || staging.getBoundingClientRect().height || 280;
+                container.style.minHeight = stagingH + 'px';
+            }
+            updateStagingVisibility();
+            if (!adsensePositionedOnce) {
+                adsensePositionedOnce = true;
+                requestAnimationFrame(function() {
+                    requestAnimationFrame(function() {
+                        updateStagingVisibility();
+                    });
+                });
+            }
+        }
+        if (ins.getAttribute('data-adsbygoogle-status') === 'done') {
+            doPosition();
+            return;
+        }
+        var observer = new MutationObserver(function(mutations) {
+            if (ins.getAttribute('data-adsbygoogle-status') === 'done') {
+                observer.disconnect();
+                doPosition();
+            }
+        });
+        observer.observe(ins, { attributes: true, attributeFilter: ['data-adsbygoogle-status'] });
+    }
+    function isAdsenseRendered(ins) {
+        return !!(ins && ins.getAttribute('data-adsbygoogle-status') === 'done');
+    }
+    function adsenseDebugLog(msg, obj) {
+        if (!ADSENSE_CONFIG.debug) return;
+        if (obj !== undefined) console.log('[adsense]', msg, obj);
+        else console.log('[adsense]', msg);
+    }
+    function isLastPageVisible(slick) {
+        // #last_page を含む slick-slide が表示中かで判定する
+        // 見開きでは最終頁がcurrentにならないかもしれないので、activeも見る
+        if (!slick) return false;
+        var $lastSlide = $('#last_page').closest('.slick-slide');
+        return ($lastSlide.length > 0) && ($lastSlide.hasClass('slick-active') || $lastSlide.hasClass('slick-current'));
+    }
+    function canRenderAdsenseNow(ins) {
+        if (!ADSENSE_CONFIG.enabled) return false;
+        if (!ins || !ins.isConnected) return false;
+        if (isAdsenseRendered(ins)) return false;
+        if (!window.__adsenseScriptLoaded) return false;
+        var container = ins.parentElement;
+        if (!container) return false;
+        if ($slider[0] && $slider[0].offsetWidth <= 0) return false;
+        var cW = container.getBoundingClientRect().width;
+        if (cW < ADSENSE_CONFIG.minContainerWidthPx) return false;
+        return true;
+    }
+    function attemptRenderAdsense() {
+        var ins = getAdsenseIns();
+        if (!ins) return;
+        // すでに描画済み: staging にあれば表示状態だけ更新（位置は最終ページのとき updateStagingVisibility で行う）。
+        if (isAdsenseRendered(ins)) {
+            if (ins.closest('#adsense-staging')) updateStagingVisibility();
+            else adsenseDebugLog('skip (already done)');
+            return;
+        }
+        ensureStagingSize();
+        if (ADSENSE_CONFIG.debug && adsenseRetryCount === 0) {
+            var container = ins.parentElement;
+            var sliderEl = $slider[0];
+            var listEl = sliderEl && sliderEl.querySelector && sliderEl.querySelector('.slick-list');
+            var trackEl = sliderEl && sliderEl.querySelector && sliderEl.querySelector('.slick-track');
+            var lastPageInEl = sliderEl && sliderEl.querySelector && sliderEl.querySelector('#last_page .last_page_in');
+            adsenseDebugLog('attempt', {
+                scriptLoaded: !!window.__adsenseScriptLoaded,
+                hasAdsbygoogleArray: !!window.adsbygoogle,
+                inStaging: !!ins.closest('#adsense-staging'),
+                insStatus: ins.getAttribute('data-adsbygoogle-status'),
+                containerDisplay: container ? getComputedStyle(container).display : null,
+                containerWidth: container ? container.getBoundingClientRect().width : null,
+                sliderWidth: (sliderEl ? sliderEl.offsetWidth : null),
+                sliderHeight: (sliderEl ? sliderEl.getBoundingClientRect().height : null),
+                listHeight: (listEl ? listEl.getBoundingClientRect().height : null),
+                trackHeight: (trackEl ? trackEl.getBoundingClientRect().height : null),
+                lastPageInHeight: (lastPageInEl ? lastPageInEl.getBoundingClientRect().height : null)
+            });
+        }
+        if (canRenderAdsenseNow(ins)) {
+            try {
+                (window.adsbygoogle = window.adsbygoogle || []).push({});
+                adsenseDebugLog('push ok (staging)');
+                observeAdsenseDoneThenMove(ins);
+            } catch (e) {
+                adsenseDebugLog('push error', e);
+            }
+            return;
+        }
+        if (adsenseRetryCount++ >= ADSENSE_CONFIG.maxAttempts) {
+            adsenseDebugLog('give up (maxAttempts reached)');
+            return;
+        }
+        adsenseRetryTimer = setTimeout(attemptRenderAdsense, ADSENSE_CONFIG.retryDelayMs);
+    }
+    function scheduleRenderAdsense() {
+        clearAdsenseRetry();
+        adsenseDebugLog('schedule');
+        attemptRenderAdsense();
+    }
     function getEdgeZoneForBar() {
         try {
             if ($slider.hasClass('slick-initialized')) {
@@ -120,6 +340,9 @@ $(function(){
     }
 
     var slickCommonOptions = {
+        // accessibility=true だと Slick が slide の id を slick-slideXX に書き換えるため、
+        // #last_page 等の固定 id を維持したいこのビューアでは常に false にする
+        accessibility: false,
         dots: true,
         appendDots: $('.dots'),
         prevArrow: '<div class="slide-arrow prev-arrow"><span></span></div>',
@@ -160,13 +383,12 @@ $(function(){
                     currentSlide = currentSlide;
                 } else {
                     if (isRightPage(page) && currentSlide > 0) {
-                        currentSlide = currentSlide - 1;
+                        currentSlide = currentSlide;
                     }
                 }
             }
 
             $slider.slick($.extend({}, slickCommonOptions, {
-                accessibility: false,
                 slidesToShow: 1,
                 slidesToScroll: 1,
                 initialSlide: currentSlide
@@ -225,24 +447,78 @@ $(function(){
                 $('.total').text(slick.slideCount - total_minus + 1);
             } else { //左ページ始まりの時
                 $('.total').text(slick.slideCount - total_minus);
-            }  
+            }
+            updateStagingVisibility();
         });
         $slider.off('beforeChange.zone').on('beforeChange.zone', function(event, slick, currentSlide, nextSlide) {
             $('.current').text(nextSlide + 1);
         });
+        // 最終ページから離れるめくりの直前に staging を画面外へ（見開きでは currentSlide が「左側」なので、表示範囲に last が含まれるかで判定）
+        $slider.off('beforeChange.adsenseStaging').on('beforeChange.adsenseStaging', function(event, slick, currentSlide, nextSlide) {
+            if (currentSlide === nextSlide) return;
+            var $lastSlide = $('#last_page').closest('.slick-slide');
+            var lastSlideIndex = $lastSlide.length ? parseInt($lastSlide.attr('data-slick-index'), 10) : -1;
+            if (lastSlideIndex < 0) return;
+            var n = slick.options.slidesToShow || 1;
+            var lastPageVisibleNow = lastSlideIndex >= currentSlide && lastSlideIndex < currentSlide + n;
+            var lastPageVisibleAfter = lastSlideIndex >= nextSlide && lastSlideIndex < nextSlide + n;
+            if (lastPageVisibleNow && !lastPageVisibleAfter) {
+                var staging = document.getElementById('adsense-staging');
+                if (staging) {
+                    staging.style.position = 'fixed';
+                    staging.style.left = ADSENSE_STAGING_OFFSCREEN;
+                    staging.style.top = ADSENSE_STAGING_OFFSCREEN;
+                }
+            }
+        });
+
+        // AdSense: push は初回ロードで 1 回だけ。ad-container 位置への表示は最終ページに来た時（updateStagingVisibility）で行う。
+        adsenseLastSlideIndex = -1;
+        $slider.off('afterChange.adsense').on('afterChange.adsense', function(event, slick, currentSlide) {
+            if (slick.currentSlide === adsenseLastSlideIndex) return;
+            adsenseLastSlideIndex = slick.currentSlide;
+            if (ADSENSE_CONFIG.debug && !window.__adsenseAfterChangeSeen) {
+                window.__adsenseAfterChangeSeen = true;
+                var el = slick && slick.$slides ? slick.$slides.get(slick.currentSlide) : null;
+                adsenseDebugLog('afterChange handler active', { currentSlide: slick ? slick.currentSlide : null, currentId: el ? el.id : null });
+            }
+            if (!isLastPageVisible(slick)) clearAdsenseRetry();
+            updateStagingVisibility();
+        });
+        // 初回ロードで push。広告は staging で読み込み、最終ページに来たときに ad-container 位置に表示する。
+        setTimeout(function() {
+            scheduleRenderAdsense();
+            try {
+                var slick = $slider.slick('getSlick');
+                if (slick && isLastPageVisible(slick)) adsenseLastSlideIndex = slick.currentSlide;
+            } catch (e) {}
+        }, 0);
     }
  
     sliderSetting();
     
-    // リサイズ時は「単ページ⇔見開き」が切り替わる時だけ再初期化。通常は setPosition のみ（パフォーマンス改善）。
+    // リサイズ時は「単ページ⇔見開き」が切り替わる時だけ再初期化。それ以外は変化終了 0.5 秒後に再位置合わせ（push はしないので随時発火でもよいが、連続リサイズ時の負荷を抑えるため debounce）。
     var lastIsSinglePage = (($(window).width() <= BREAKPOINT_PX) || isMobileDevice);
     $(window).on('resize', function() {
         var nowIsSinglePage = (($(window).width() <= BREAKPOINT_PX) || isMobileDevice);
         if (nowIsSinglePage !== lastIsSinglePage) {
             lastIsSinglePage = nowIsSinglePage;
+            if (adsenseResizeTimer) { clearTimeout(adsenseResizeTimer); adsenseResizeTimer = null; }
             sliderSetting();
         } else {
-            try { $slider.slick('setPosition'); } catch(err) {}
+            if (adsenseResizeTimer) clearTimeout(adsenseResizeTimer);
+            adsenseResizeTimer = setTimeout(function() {
+                adsenseResizeTimer = null;
+                if (!window.__comicDisableRelayout) {
+                    try { $slider.slick('setPosition'); } catch (err) {}
+                }
+                try {
+                    if ($slider.slick('getSlick') && isLastPageVisible($slider.slick('getSlick'))) {
+                        positionStagingOverAdContainer();
+                    }
+                    updateStagingVisibility();
+                } catch (e) {}
+            }, 0);
         }
     });
 
