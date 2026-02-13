@@ -3,6 +3,10 @@
  * This file has multiple authors. See the license block at the end of content/comic.js.
  */
 
+:root {
+    --breakpoint-px: 768px;
+}
+
 html {
     /*ブラウザ機能によるダブルタップズームを抑止*/
     -ms-touch-action: manipulation;
@@ -33,9 +37,7 @@ img{
 }
 
 /***メイン画像部分**********************************************/
-/* 縦センタリング用に .slider 配下の div を 100% 高さにしておく。
- * ※ AdSense 表示時に縦幅が壊れる原因調査のため、広告注入DOMにも効く状態にしている。
- */
+/* 縦センタリング用に .slider 配下の div を 100% 高さにしておく */
 .slider div{
     height: 100%;
 }
@@ -64,7 +66,7 @@ img{
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    height: 100% !important;  /* index 等で height:auto !important がかかることがあるため上書き（親は #last_page） */
+    height: 100%;
 }
 .slider div .last_page_in > div{
     height: auto;
@@ -75,9 +77,9 @@ img{
     flex-direction: column;
     align-items: center;
 }
-/* 広告用コンテナ */
-.slider div .last_page_in .ad-container{
-    /* last_page_in 周辺が flex を多用するため、広告スロットの親が flex になって潰れないよう固定する */
+/* 広告用スペーサー（高さ確保。実際の広告は #adsense-slot をここに重ねて表示） */
+.slider div .last_page_in .ad-spacer{
+    /* last_page_in 周辺が flex を多用するため、スペーサーが flex で潰れないよう固定する */
     display: block;
     width: 100%;
     margin: 0 auto;
@@ -95,7 +97,7 @@ img{
     margin: 0 0 0.7em;
 }
 
-@media (max-width:768px) {/*指定幅以下になった時*/
+@media (max-width: var(--breakpoint-px)) {/*指定幅以下になった時*/
     .slick-slide .c_i>div,.slick-slide:nth-child(odd) .c_i>div{
         justify-content: center;
     }
@@ -145,10 +147,10 @@ img{
 }
 
 /***矢印**********************************************/
-/* 親 .slide-arrow はタッチ判定用のみ（comic.js で top/height/幅を設定）。表示は ::after で fixed＋画面上下中央に分離。 */
+/* 親 .slide-arrow はタッチ判定用のみ（comic.js で top/height/幅を設定）。表示は ::after で*/
 .slide-arrow{
     opacity: 0;
-    z-index: 10; /* ページバー（オーバーレイ）より背面にして、バー表示中はバー側の判定を最優先にする */
+    z-index: 10; /* ページバーより背面にして、バー表示中はバー側の判定を最優先にする */
     height: 100%;
     width: 35%;
     position: absolute;
@@ -179,12 +181,12 @@ img{
 .slide-arrow.prev-arrow span{
     visibility: hidden;
 }
-/* 無効時は消さず不可視・無反応にしてレイアウトを維持（表示時の位置チラつき防止）。JS でも同様に設定 */
+/* 無効時は消さず不可視・無反応にしてレイアウトを維持（表示時の位置チラつき防止）。 */
 .slide-arrow.slick-disabled{
     visibility: hidden;
     pointer-events: none;
 }
-/* 矢印の見た目：fixed＋top:50% translateY(-50%) で画面の上下中央に固定（判定領域と表示位置を分離） */
+/* 矢印の見た目：fixed＋top:50% translateY(-50%) で画面の上下中央に固定 */
 .slide-arrow.next-arrow::after{
     content: '\e902';
     position: fixed;
@@ -223,7 +225,7 @@ img{
     text-shadow: inherit;
     pointer-events: none;
 }
-@media (max-width:768px) {/*指定幅以下になった時*/
+@media (max-width: var(--breakpoint-px)) {/*指定幅以下になった時*/
     .slide-arrow{
         font-size: 2em;
     }
@@ -261,7 +263,7 @@ small{
     box-sizing: border-box;
     padding: 4px 0;
 }
-@media (min-width:769px) {/*指定幅以上の時*/
+@media (min-width: calc(var(--breakpoint-px) + 1px)) {/*指定幅以上の時*/
     .button:hover{
         background-color: #fff;
         border-color: #59b1eb;
@@ -287,9 +289,8 @@ small{
     width: 200px;
 }
 
-/***ページバーオーバーレイ（表示・デザインの数値はここで一括指定）**********************************************/
+/***ページバー**********************************************/
 .page-bar-overlay{
-    /* 以下を変更するとバーの出し入れ・見た目を一括調整できる */
     --page-bar-box-bg: rgba(0,0,0,0.8);
     --page-bar-box-color: #ccc;
     --page-bar-box-padding-top: 8px;
@@ -301,14 +302,13 @@ small{
     top: 0;
     left: 0;
     right: 0;
-    /* 画面全体ではなく上部バー領域のみを覆う */
     z-index: 20;
     opacity: 0;
     pointer-events: none;
     transition: opacity ease;
 }
 .page-bar-overlay:not(.page-bar-visible) .page-bar-box .slick-dots li button::before{
-    /* バー非表示時は透明ヒット領域も完全に無効化（念のため） */
+    /* バー非表示時は透明ヒット領域も無効化 */
     pointer-events: none;
 }
 .page-bar-overlay.page-bar-visible{
@@ -320,7 +320,6 @@ small{
     top: 0;
     left: 0;
     right: 0;
-    /* オーバーレイの高さ（=バー領域）のみをカバー */
     cursor: pointer;
 }
 .page-bar-box{
@@ -348,12 +347,11 @@ small{
     /* ドットの判定領域を上下に少しはみ出させるため、ここだけ overflow を外す */
     overflow: visible;
 }
-/* 押した瞬間のカラー反応はなくし、現在地（.slick-active）の明るいグレーだけ残す */
 .page-bar-box .slick-dots li button{
     -webkit-tap-highlight-color: transparent;
     position: relative; /* 擬似要素の基準にする */
 }
-/* 見た目はそのままに、上下方向だけヒット領域を50pxずつ広げる透明レイヤー */
+/* ドットの上下に透明のヒット領域を広げる */
 .page-bar-box .slick-dots li button::before{
     content: "";
     position: absolute;
@@ -364,12 +362,13 @@ small{
     background: transparent;
     pointer-events: auto;
 }
+/* 非アクティブのドット */
 .page-bar-box .slick-dots li button:hover,
 .page-bar-box .slick-dots li button:focus,
 .page-bar-box .slick-dots li button:active{
-    background: #555555; /* 非アクティブは常にベース色のまま */
+    background: #555555;
 }
-/* 現在地のドットは常に明るいグレー（hover/focus/active 中も含めて） */
+/* アクティブのドット */
 .page-bar-box .slick-dots li.slick-active button,
 .page-bar-box .slick-dots li.slick-active button:hover,
 .page-bar-box .slick-dots li.slick-active button:focus,
@@ -377,7 +376,7 @@ small{
     background: #cccccc;
 }
 
-/***ページバー内（slick-counter / dots はメニュー削除後も使用）**********************************************/
+/***ページバー内**********************************************/
 .slick-counter{
     margin: 22px 0 8px;
 }
@@ -385,10 +384,8 @@ small{
     margin: 0 0 16px;
 }
 
-@media (max-width:768px) {/*指定幅以下になった時*/
+@media (max-width: var(--breakpoint-px)) {/*指定幅以下になった時*/
     h1{
         font-size: 1.6em;
     }
 }
-
-/* ガイド・ヘルプ・拡大モード・メニュー・全画面は未使用のため削除済み（元ファイルに残っているので必要なら復活可） */

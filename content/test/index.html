@@ -8,21 +8,22 @@
     <link href="../images/style.css" rel="stylesheet">
     <link href="../comi_style.css" rel="stylesheet">
     <script src="../../jquery-3.6.0.min.js"></script>
-
     <script>
-/** 入力ここから **/
+        /** 入力ここから **/
         var page = 4; //ページ数
         var imgtype = "png"; //画像の拡張子
-        var title = "タイトル名"; //タイトル名
-        var site = "サイトアドレス"; //サイトのURL
-        var copy = "作者名"; //作者名
+        var title = "テストタイトル名"; //タイトル名
+        var site = "テストサイトアドレス"; //サイトのURL
+        var copy = "テスト作者名"; //作者名
+        var comment = "テストコメント"; //コメント
         var display = 0; //左ページ始まりは「0」、右ページ始まりは「1」
-        /* *ここまで **/
+        /** ここまで **/
         
         $(function(){
             $("title,h1").text(title);
             $(".o_button").attr("onClick", "location.href='" + site + "'");
             $(".copy").text(copy);
+            $(".comment").text(comment);
             for(var i=1; i<=page; i++){
                 $('#last_page').before('<div class="c_i"><div><img data-lazy="' + i + '.' + imgtype + '" src="../images/load.gif"></div></div>'); 
             }
@@ -40,16 +41,14 @@
         <div id="last_page">
             <div class="last_page_in" dir="ltr">
                 <div>
-                    <!--最終ページフリー追加ゾーンここから-->
-
-                    <!-- Adsense広告（表示完了後に staging からここに移動。実験: 再検知の有無を確認） -->
-                    <div class="ad-container"></div>
-                    
-                    
+                    <!--Adsenseコード追加ゾーンに中身があるとき、ad_spacer内に表示します-->
+                    <div class="ad-spacer"></div>
+                    <!--最終ページフリー追加ゾーンここから-->                    
 
                     <!--最終ページフリー追加ゾーンここまで-->
                 </div>
                 <h1></h1>
+                <small><span class="comment"></span></small>
                 <small>Copyright &copy; <span class="copy"></span> All Rights Reserved</small>
                 <!--最終ページにボタンを追加する場合は以下をコメントアウト解除して編集-->
                 <!--
@@ -67,7 +66,7 @@
     </div>
     <!--漫画表示ゾーンここまで-->
 
-    <!-- ページバー（バックドロップ）-->
+    <!--ページバー-->
     <div id="page-bar-overlay" class="page-bar-overlay page-bar-visible">
         <div class="page-bar-backdrop"></div>
         <div class="page-bar-box">
@@ -76,18 +75,18 @@
         </div>
     </div>    
     
-    <!-- AdSense 仮置き（スライダー外で描画し、done 後に #last_page .ad-container へ移動） -->
-    <div id="adsense-staging" aria-hidden="true" style="position:absolute;left:9999px;top:9999px;width:320px;height:280px;overflow:hidden;visibility:hidden;">
+    <div id="adsense-slot" aria-hidden="true" style="position:absolute;left:9999px;top:9999px;width:320px;height:280px;overflow:hidden;visibility:hidden;">
+        <!-- Google AdSenseコード追加ゾーンここから -->
         <ins class="adsbygoogle" style="display:block"
-             data-ad-client="ca-pub-9668516109348519"
-             data-ad-slot="1397168732"
-             data-ad-format="auto"></ins>
+            data-ad-client="ca-pub-9668516109348519"
+            data-ad-slot="1397168732"
+            data-ad-format="auto"></ins>
+        <!-- Google AdSenseコード追加ゾーンここまで -->
     </div>
-    <!-- Google AdSense (load once per page) -->
-    <script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js" onload="window.__adsenseScriptLoaded = true;"></script>
-    
+    <!--Google Adsenseを使いたい場合はコメントアウト解除-->    
+    <script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js" onload="window.__adsenseScriptLoaded = true;"></script>   
+    <!--コード追加ゾーンに同じadsbygoogle.jsの読み込みが含まれている場合、こっちを残して下さい-->
     <script src="../../slick.min.mjs"></script>
-    <!-- 斜めスワイプ時にY成分を0扱いにするカスタムSlickパッチ -->
     <script src="../../slick-swipe-custom.js"></script>
     <script src="../comic.js"></script>
 </body>

@@ -1,11 +1,8 @@
 $(function(){
-//*** 設定：ブレークポイント・ページバー・タップフラグなどはここと PAGE_BAR_CONFIG に集約 ***
-    var BREAKPOINT_PX = 768;
-
-//***ブラウザ幅取得***
+// ブラウザ幅取得
     var width = $(window).width();
 
-//***端末フラグ（iPhone/iPod/Androidのとき常に単ページ扱い。iPad・Macは除外）***
+// 端末フラグ（iPhone/iPod/Androidのとき常に単ページ扱い。iPad・Macは除外）
     var agent = navigator.userAgent;
     var isMobileDevice =
         (agent.search(/iPhone/) != -1) ||
@@ -13,13 +10,18 @@ $(function(){
         (agent.search(/Android/) != -1);
     var isTouchDevice = (agent.search(/iPhone/) != -1) || (agent.search(/iPad/) != -1) || (agent.search(/iPod/) != -1) || (agent.search(/Android/) != -1) || (agent.search(/Macintosh/) != -1 && 'ontouchend' in document);
     
-//***first_page定数宣言***
+// first_pageのHTML
     var firstPageHtml = '<div id="first_page"></div>';
     
-//***パラメータ指定***
+// パラメータ指定
     var num = 1;
+    var $pageBarOverlay = $('#page-bar-overlay');
+    var $body = $('body');
+    var pageBarHideTimer = null;
+    var pageBarTouchStartSlide = null;
+    var pageBarCachedHeight = 0;
     
-    // URLのパラメータを取得（?p=n）
+// URLのパラメータを取得（?p=n）
     var urlParam = location.search.substring(1);
     if (urlParam) {
         var param = urlParam.split('&');
@@ -50,8 +52,11 @@ $(function(){
         }
     }
     
-//***slick設定***（$slider は他ファイルから参照されず、本 ready 内のスコープのみで使用）
-    var $slider = $('.slider');
+//*** slick設定・メイン動作コンフィグ***
+    // 単ページ表示・見開き表示のブレークポイント
+    var BREAKPOINT_PX = 768;
+
+    var $slider = $('.slider');// 他ファイルからは参照せず、本jsのスコープのみで使用
     var total_minus = 0;
 
     // タップ/クリック反応領域の定義（排他）。数値はここだけ。上部・めくり左右・中央。
@@ -67,7 +72,7 @@ $(function(){
         fadeInDurationMs: 350,       // バーのフェードイン時間（ms）
         fadeOutDurationMs: 800,      // バーのフェードアウト時間（ms）
         initialFadeOutDurationMs: 1000,  // バーの初回フェードアウト時間（ms）
-        tapFlagResetMs: 400          // 表示/非表示タップ直後のフラグリセット待ち（ms）
+        tapFlagResetMs: 350          // 表示/非表示タップ後、またタップできるようになるまでの待ち時間（ms）
     };
     // ピンチ拡大時に外にはみ出ないようにするクランプ挙動（遊び量・抵抗・スナップ復帰）
     var PINCH_PAN_CONFIG = {
@@ -85,244 +90,10 @@ $(function(){
         thresholdY: 40,             // この量（累積）を超えたらページ送り
         cooldownMs: 250             // 連続送り抑止（ms）
     };
-    // AdSense（最終ページ）表示制御：push は「最終ページが表示されたタイミング」で1回だけ。幅0なら短くリトライ。
-    var ADSENSE_CONFIG = {
-        enabled: true,
-        debug: true,                // デバッグ用ログ（本番では false 推奨）
-        minContainerWidthPx: 10,    // これ未満なら width0 相当としてリトライ
-        retryDelayMs: 250,
-        maxAttempts: 12
-    };
-    var $pageBarOverlay = $('#page-bar-overlay');
-    var $body = $('body');
-    var pageBarHideTimer = null;
-    var pageBarTouchStartSlide = null;
-    var pageBarCachedHeight = 0;
-    var adsenseRetryTimer = null;
-    var adsenseResizeTimer = null;  // リサイズ debounce 用。
-    var adsenseRetryCount = 0;
-    var adsenseLastSlideIndex = -1;  // 実際にスライドが変わった時だけ schedule するための前回インデックス
-    var adsensePositionedOnce = false; // 初回位置合わせを rAF でやり直したか
-    var adsenseStagingWidthBeforePush = 0; // push 前に ensureStagingSize で設定した幅（x-2a）。push 後再適用。表示判定はコンテナ幅 >= この値で行う
-    var ADSENSE_STAGING_WIDTH_BUFFER_PX = 10; // 左右5px。アドセンスに渡す幅だけ x-2a にし、それ以下の広告が来るので閾値は不要
 
-    function clearAdsenseRetry() {
-        if (adsenseRetryTimer) { clearTimeout(adsenseRetryTimer); adsenseRetryTimer = null; }
-        adsenseRetryCount = 0;
-    }
-    /** ins はまず #adsense-staging にあり、表示完了後に #last_page .ad-container へ移動する。staging 優先で取得。 */
-    function getAdsenseIns() {
-        var staging = document.getElementById('adsense-staging');
-        if (staging) {
-            var ins = staging.querySelector('ins.adsbygoogle');
-            if (ins) return ins;
-        }
-        return document.querySelector('#last_page ins.adsbygoogle');
-    }
-    /** 仮置き用 staging の幅を .last_page_in の横幅から左右5pxバッファを引いた値にする。push 前に呼ぶ。 */
-    function ensureStagingSize() {
-        var staging = document.getElementById('adsense-staging');
-        if (!staging) return;
-        var lastPage = document.getElementById('last_page');
-        var lastPageIn = document.querySelector('#last_page .last_page_in');
-        var w = lastPageIn ? lastPageIn.getBoundingClientRect().width : 0;
-        var lastPageW = lastPage ? lastPage.getBoundingClientRect().width : 0;
-        // 読み込み時：参照元の値
-        console.log('[adsense-width] 読み込み時', { lastPageInW: w, lastPageW: lastPageW });
-        if (lastPageW && w && Math.abs(w - lastPageW) < 2) w = Math.round(lastPageW * 0.8);
-        if (w && w > 0) w = Math.max(320, Math.round(w) - ADSENSE_STAGING_WIDTH_BUFFER_PX);
-        else w = 320;
-        staging.style.width = w + 'px';
-        staging.style.height = '280px';
-        adsenseStagingWidthBeforePush = w;
-        // アドセンスに渡す時：staging に設定した幅
-        console.log('[adsense-width] アドセンスに渡す時', { stagingWidth: w });
-    }
-    /** 画面外の座標（子が visible だと親の visibility が効かないため、非表示は位置で行う）。 */
-    var ADSENSE_STAGING_OFFSCREEN = '9999px';
-    /** staging の縦幅を ad-container に転写してレイアウトを確保してから、ad-container の位置に staging を重ねる。staging 内はセンタリング。
-     * staging の親は body だが、left/top/width/height を ad-container.getBoundingClientRect() で与えているだけなので、
-     * 「左ページのパディングに合わせて見える」のは親の overflow ではなく、その rect がすでに last_page_in の margin 等を含んだ領域だから。 */
-    function positionStagingOverAdContainer() {
-        var container = document.querySelector('#last_page .ad-container');
-        var staging = document.getElementById('adsense-staging');
-        if (!container || !staging) return;
-        var stagingH = staging.offsetHeight || staging.getBoundingClientRect().height || 280;
-        container.style.minHeight = stagingH + 'px';
-        var rect = container.getBoundingClientRect();
-        staging.style.position = 'fixed';
-        staging.style.left = rect.left + 'px';
-        staging.style.top = rect.top + 'px';
-        staging.style.width = rect.width + 'px';
-        staging.style.height = rect.height + 'px';
-        staging.style.zIndex = '10';
-        staging.style.display = 'flex';
-        staging.style.justifyContent = 'center';
-        staging.style.alignItems = 'center';
-        adsenseDebugLog('staging positioned over ad-container');
-    }
-    /** 最終ページがアクティブかつ コンテナ幅 >= staging幅 なら表示。渡す幅を x-2a にしているのでそれ以下の広告が来る。それ以外は画面外に移す。 */
-    function updateStagingVisibility() {
-        var staging = document.getElementById('adsense-staging');
-        if (!staging) return;
-        var container = document.querySelector('#last_page .ad-container');
-        try {
-            var slick = $slider.slick('getSlick');
-            var ins = getAdsenseIns();
-            var onLast = isLastPageVisible(slick);
-            var adReady = ins && isAdsenseRendered(ins) && ins.closest('#adsense-staging');
-            var containerW = container ? container.getBoundingClientRect().width : 0;
-            var stagingW = adsenseStagingWidthBeforePush > 0 ? adsenseStagingWidthBeforePush : (staging.getBoundingClientRect().width || 200);
-            var wideEnough = containerW >= stagingW;
-            console.log('[adsense-width] 幅の比較', { containerW: containerW, stagingW: stagingW, wideEnough: wideEnough });
-            var showOnContainer = onLast && adReady && wideEnough;
-            console.log('[adsense-width] 広告表示判定', { onLast: onLast, adReady: adReady, wideEnough: wideEnough, containerW: containerW, stagingW: stagingW, 表示する: showOnContainer });
-            if (showOnContainer) {
-                positionStagingOverAdContainer();
-            } else {
-                staging.style.position = 'fixed';
-                staging.style.left = ADSENSE_STAGING_OFFSCREEN;
-                staging.style.top = ADSENSE_STAGING_OFFSCREEN;
-                // 広告未読込時は minHeight を 0 に。読込済みで最終ページだが幅不足で非表示にした時も 0 に（コンテナを小さくする）
-                if (container && (!adReady || (onLast && !wideEnough))) container.style.minHeight = '0';
-            }
-        } catch (e) {
-            staging.style.position = 'fixed';
-            staging.style.left = ADSENSE_STAGING_OFFSCREEN;
-            staging.style.top = ADSENSE_STAGING_OFFSCREEN;
-            if (container) container.style.minHeight = '0';
-        }
-    }
-    /** ins の data-adsbygoogle-status が "done" になったら広告幅を記録し、表示は updateStagingVisibility（最終ページのときだけ ad-container 位置に出す）。初回は rAF で位置をやり直す。 */
-    function observeAdsenseDoneThenMove(ins) {
-        if (!ins) return;
-        var staging = document.getElementById('adsense-staging');
-        function doPosition() {
-            if (!staging) return;
-            // push 前に設定した幅を再適用（AdSense が staging の幅を変えることがあるため）
-            if (adsenseStagingWidthBeforePush > 0) {
-                staging.style.width = adsenseStagingWidthBeforePush + 'px';
-                staging.style.height = '280px';
-            }
-            // push 完了時点で ad-container の高さを入れておく（最終ページを開いた時に一瞬サイズ0が見えないように）
-            var container = document.querySelector('#last_page .ad-container');
-            if (container) {
-                var stagingH = staging.offsetHeight || staging.getBoundingClientRect().height || 280;
-                container.style.minHeight = stagingH + 'px';
-            }
-            updateStagingVisibility();
-            if (!adsensePositionedOnce) {
-                adsensePositionedOnce = true;
-                requestAnimationFrame(function() {
-                    requestAnimationFrame(function() {
-                        updateStagingVisibility();
-                    });
-                });
-            }
-        }
-        if (ins.getAttribute('data-adsbygoogle-status') === 'done') {
-            doPosition();
-            return;
-        }
-        var observer = new MutationObserver(function(mutations) {
-            if (ins.getAttribute('data-adsbygoogle-status') === 'done') {
-                observer.disconnect();
-                doPosition();
-            }
-        });
-        observer.observe(ins, { attributes: true, attributeFilter: ['data-adsbygoogle-status'] });
-    }
-    function isAdsenseRendered(ins) {
-        return !!(ins && ins.getAttribute('data-adsbygoogle-status') === 'done');
-    }
-    function adsenseDebugLog(msg, obj) {
-        if (!ADSENSE_CONFIG.debug) return;
-        if (obj !== undefined) console.log('[adsense]', msg, obj);
-        else console.log('[adsense]', msg);
-    }
-    function isLastPageVisible(slick) {
-        // #last_page を含む slick-slide が表示中かで判定する
-        // 見開きでは最終頁がcurrentにならないかもしれないので、activeも見る
-        if (!slick) return false;
-        var $lastSlide = $('#last_page').closest('.slick-slide');
-        return ($lastSlide.length > 0) && ($lastSlide.hasClass('slick-active') || $lastSlide.hasClass('slick-current'));
-    }
-    function canRenderAdsenseNow(ins) {
-        if (!ADSENSE_CONFIG.enabled) return false;
-        if (!ins || !ins.isConnected) return false;
-        if (isAdsenseRendered(ins)) return false;
-        if (!window.__adsenseScriptLoaded) return false;
-        var container = ins.parentElement;
-        if (!container) return false;
-        if ($slider[0] && $slider[0].offsetWidth <= 0) return false;
-        var cW = container.getBoundingClientRect().width;
-        if (cW < ADSENSE_CONFIG.minContainerWidthPx) return false;
-        return true;
-    }
-    function attemptRenderAdsense() {
-        var ins = getAdsenseIns();
-        if (!ins) return;
-        // すでに描画済み: staging にあれば表示状態だけ更新（位置は最終ページのとき updateStagingVisibility で行う）。
-        if (isAdsenseRendered(ins)) {
-            if (ins.closest('#adsense-staging')) updateStagingVisibility();
-            else adsenseDebugLog('skip (already done)');
-            return;
-        }
-        ensureStagingSize();
-        if (ADSENSE_CONFIG.debug && adsenseRetryCount === 0) {
-            var container = ins.parentElement;
-            var sliderEl = $slider[0];
-            var listEl = sliderEl && sliderEl.querySelector && sliderEl.querySelector('.slick-list');
-            var trackEl = sliderEl && sliderEl.querySelector && sliderEl.querySelector('.slick-track');
-            var lastPageInEl = sliderEl && sliderEl.querySelector && sliderEl.querySelector('#last_page .last_page_in');
-            adsenseDebugLog('attempt', {
-                scriptLoaded: !!window.__adsenseScriptLoaded,
-                hasAdsbygoogleArray: !!window.adsbygoogle,
-                inStaging: !!ins.closest('#adsense-staging'),
-                insStatus: ins.getAttribute('data-adsbygoogle-status'),
-                containerDisplay: container ? getComputedStyle(container).display : null,
-                containerWidth: container ? container.getBoundingClientRect().width : null,
-                sliderWidth: (sliderEl ? sliderEl.offsetWidth : null),
-                sliderHeight: (sliderEl ? sliderEl.getBoundingClientRect().height : null),
-                listHeight: (listEl ? listEl.getBoundingClientRect().height : null),
-                trackHeight: (trackEl ? trackEl.getBoundingClientRect().height : null),
-                lastPageInHeight: (lastPageInEl ? lastPageInEl.getBoundingClientRect().height : null)
-            });
-        }
-        if (canRenderAdsenseNow(ins)) {
-            try {
-                (window.adsbygoogle = window.adsbygoogle || []).push({});
-                adsenseDebugLog('push ok (staging)');
-                observeAdsenseDoneThenMove(ins);
-            } catch (e) {
-                adsenseDebugLog('push error', e);
-            }
-            return;
-        }
-        if (adsenseRetryCount++ >= ADSENSE_CONFIG.maxAttempts) {
-            adsenseDebugLog('give up (maxAttempts reached)');
-            return;
-        }
-        adsenseRetryTimer = setTimeout(attemptRenderAdsense, ADSENSE_CONFIG.retryDelayMs);
-    }
-    function scheduleRenderAdsense() {
-        clearAdsenseRetry();
-        adsenseDebugLog('schedule');
-        attemptRenderAdsense();
-    }
-    function getEdgeZoneForBar() {
-        try {
-            if ($slider.hasClass('slick-initialized')) {
-                var n = $slider.slick('getSlick').options.slidesToShow;
-                return n === 1 ? PAGE_BAR_CONFIG.edgeZoneNarrow : PAGE_BAR_CONFIG.edgeZoneWide;
-            }
-        } catch (e) {}
-        var r = $slider[0] && $slider[0].getBoundingClientRect();
-        var w = (r && r.width) ? r.width : $(window).width();
-        return w <= PAGE_BAR_CONFIG.breakpointWidth ? PAGE_BAR_CONFIG.edgeZoneNarrow : PAGE_BAR_CONFIG.edgeZoneWide;
-    }
+//*** メイン動作の処理***
     function getTopZoneHeight() { return pageBarCachedHeight || PAGE_BAR_CONFIG.topZoneY; }
-    /** 反応領域を排他に判定。'top'|'left'|'right'|'center'。矢印・ホバー・タップで同じ領域。'left'/'right'＝めくり領域 */
+    // 反応領域を排他に判定。'top'|'left'|'right'|'center'。矢印・ホバー・タップで同じ領域。'left'/'right'＝めくり領域
     function getTapZone(clientX, clientY) {
         if (clientY < getTopZoneHeight()) return 'top';
         var rect = $slider[0] && $slider[0].getBoundingClientRect();
@@ -334,7 +105,7 @@ $(function(){
         return 'center';
     }
     
-    /** 見開き時の「右ページ」か（display: 0=左始まり, 1=右始まり。pageNum は 1 始まりのページ番号） */
+    // 見開き時の「右ページ」か（display: 0=左始まり, 1=右始まり。pageNum は 1 始まりのページ番号）
     function isRightPage(pageNum) {
         return (display === 0 && pageNum % 2 === 0) || (display === 1 && pageNum % 2 === 1);
     }
@@ -448,51 +219,19 @@ $(function(){
             } else { //左ページ始まりの時
                 $('.total').text(slick.slideCount - total_minus);
             }
-            updateStagingVisibility();
+            adsenseOnSetPosition();
         });
         $slider.off('beforeChange.zone').on('beforeChange.zone', function(event, slick, currentSlide, nextSlide) {
             $('.current').text(nextSlide + 1);
         });
-        // 最終ページから離れるめくりの直前に staging を画面外へ（見開きでは currentSlide が「左側」なので、表示範囲に last が含まれるかで判定）
-        $slider.off('beforeChange.adsenseStaging').on('beforeChange.adsenseStaging', function(event, slick, currentSlide, nextSlide) {
-            if (currentSlide === nextSlide) return;
-            var $lastSlide = $('#last_page').closest('.slick-slide');
-            var lastSlideIndex = $lastSlide.length ? parseInt($lastSlide.attr('data-slick-index'), 10) : -1;
-            if (lastSlideIndex < 0) return;
-            var n = slick.options.slidesToShow || 1;
-            var lastPageVisibleNow = lastSlideIndex >= currentSlide && lastSlideIndex < currentSlide + n;
-            var lastPageVisibleAfter = lastSlideIndex >= nextSlide && lastSlideIndex < nextSlide + n;
-            if (lastPageVisibleNow && !lastPageVisibleAfter) {
-                var staging = document.getElementById('adsense-staging');
-                if (staging) {
-                    staging.style.position = 'fixed';
-                    staging.style.left = ADSENSE_STAGING_OFFSCREEN;
-                    staging.style.top = ADSENSE_STAGING_OFFSCREEN;
-                }
-            }
-        });
-
-        // AdSense: push は初回ロードで 1 回だけ。ad-container 位置への表示は最終ページに来た時（updateStagingVisibility）で行う。
         adsenseLastSlideIndex = -1;
-        $slider.off('afterChange.adsense').on('afterChange.adsense', function(event, slick, currentSlide) {
-            if (slick.currentSlide === adsenseLastSlideIndex) return;
-            adsenseLastSlideIndex = slick.currentSlide;
-            if (ADSENSE_CONFIG.debug && !window.__adsenseAfterChangeSeen) {
-                window.__adsenseAfterChangeSeen = true;
-                var el = slick && slick.$slides ? slick.$slides.get(slick.currentSlide) : null;
-                adsenseDebugLog('afterChange handler active', { currentSlide: slick ? slick.currentSlide : null, currentId: el ? el.id : null });
-            }
-            if (!isLastPageVisible(slick)) clearAdsenseRetry();
-            updateStagingVisibility();
+        $slider.off('beforeChange.adsenseStaging').on('beforeChange.adsenseStaging', function(event, slick, currentSlide, nextSlide) {
+            adsenseOnBeforeChange(slick, currentSlide, nextSlide);
         });
-        // 初回ロードで push。広告は staging で読み込み、最終ページに来たときに ad-container 位置に表示する。
-        setTimeout(function() {
-            scheduleRenderAdsense();
-            try {
-                var slick = $slider.slick('getSlick');
-                if (slick && isLastPageVisible(slick)) adsenseLastSlideIndex = slick.currentSlide;
-            } catch (e) {}
-        }, 0);
+        $slider.off('afterChange.adsense').on('afterChange.adsense', function(event, slick, currentSlide) {
+            adsenseOnAfterChange(slick);
+        });
+        setTimeout(adsenseOnInit, 0);
     }
  
     sliderSetting();
@@ -512,12 +251,7 @@ $(function(){
                 if (!window.__comicDisableRelayout) {
                     try { $slider.slick('setPosition'); } catch (err) {}
                 }
-                try {
-                    if ($slider.slick('getSlick') && isLastPageVisible($slider.slick('getSlick'))) {
-                        positionStagingOverAdContainer();
-                    }
-                    updateStagingVisibility();
-                } catch (e) {}
+                adsenseOnResize();
             }, 0);
         }
     });
@@ -627,7 +361,7 @@ $(function(){
         });
     }
 
-//***動作設定***
+//***ボタン動作***
     //もう一度読むボタン
     $(".b_button").on('click', function(e){
         e.preventDefault();
@@ -675,9 +409,252 @@ $(function(){
         }, { passive: false });
     }
 
+//*** Adsense関連処理***
+    var ADSENSE_CONFIG = {
+        enabled: true,
+        minContainerWidthPx: 10,     // これ未満なら width0 相当としてリトライ
+        retryDelayMs: 250,
+        maxAttempts: 12
+    };
+    var ADSENSE_SLOT_DEFAULT_WIDTH_PX = 320;   // #adsense-slot の幅フォールバック（最小レクタングル想定）
+    var ADSENSE_SLOT_DEFAULT_HEIGHT_PX = 280;  // #adsense-slot の高さフォールバック
+    var adsenseRetryTimer = null;
+    var adsenseResizeTimer = null;  // リサイズ debounce 用。
+    var adsenseRetryCount = 0;
+    var adsenseLastSlideIndex = -1;  // スライドの変化を検知し、最終ページのAdsense広告を出し入れするための前回インデックス
+    var adsensePositionedOnce = false; // 広告 done 直後は ad-spacer に minHeight を入れたばかりなので、updateAdSlotVisibility をやり直して位置を確定する一度きりフラグ
+    var adsenseSlotWidthBeforePush = 0; // ensureAdSlotSize で設定した幅。push 後に再適用。updateAdSlotVisibility の表示判定で参照するためクロージャで保持
+    var ADSENSE_SLOT_BUFFER_PER_SIDE_PX = 5; // 左右それぞれこの px 分、アドセンスに渡す幅を小さくする
+    var ADSENSE_SLOT_OFFSCREEN = '9999px';    // 非表示時は position で画面外へ（visibility は子要素で効かないため）
+
+    function clearAdsenseRetry() {
+        if (adsenseRetryTimer) { clearTimeout(adsenseRetryTimer); adsenseRetryTimer = null; }
+        adsenseRetryCount = 0;
+    }
+    // ad-spacer と #adsense-slot とその中の ins がすべて存在するときだけ true。AdSense 関連処理はこの結果でガードする。
+    function isAdsenseAvailable() {
+        var spacer = document.querySelector('#last_page .ad-spacer');
+        var slot = document.getElementById('adsense-slot');
+        var ins = slot ? slot.querySelector('ins.adsbygoogle') : null;
+        return !!(spacer && slot && ins);
+    }
+    // ins は #adsense-slot 内のアドセンス標準コードに含まれる想定。
+    function getAdsenseIns() {
+        var slot = document.getElementById('adsense-slot');
+        if (slot) {
+            var ins = slot.querySelector('ins.adsbygoogle');
+            if (ins) return ins;
+        }
+        return document.querySelector('#last_page ins.adsbygoogle');
+    }
+    // #adsense-slot の幅を .last_page_in の横幅から左右バッファを引いた値にする。push 前に呼ぶ。
+    function ensureAdSlotSize() {
+        if (!isAdsenseAvailable()) return;
+        var slot = document.getElementById('adsense-slot');
+        if (!slot) return;
+        var lastPage = document.getElementById('last_page');
+        var lastPageIn = document.querySelector('#last_page .last_page_in');
+        var w = lastPageIn ? lastPageIn.getBoundingClientRect().width : 0;
+        var lastPageW = lastPage ? lastPage.getBoundingClientRect().width : 0;
+        if (lastPageW && w && Math.abs(w - lastPageW) < 2) w = Math.round(lastPageW * 0.8);
+        if (w && w > 0) w = Math.max(ADSENSE_SLOT_DEFAULT_WIDTH_PX, Math.round(w) - ADSENSE_SLOT_BUFFER_PER_SIDE_PX * 2);
+        else w = ADSENSE_SLOT_DEFAULT_WIDTH_PX;
+        slot.style.width = w + 'px';
+        slot.style.height = ADSENSE_SLOT_DEFAULT_HEIGHT_PX + 'px';
+        adsenseSlotWidthBeforePush = w;
+    }
+    // slot の縦幅を ad-spacer に転写してレイアウトを確保し、ad-spacer の位置に #adsense-slot を重ねる。slot 内はセンタリング。
+    function positionSlotOverAdSpacer() {
+        if (!isAdsenseAvailable()) return;
+        var container = document.querySelector('#last_page .ad-spacer');
+        var slot = document.getElementById('adsense-slot');
+        if (!container || !slot) return;
+        var slotH = slot.offsetHeight || slot.getBoundingClientRect().height || ADSENSE_SLOT_DEFAULT_HEIGHT_PX;
+        container.style.minHeight = slotH + 'px';
+        var rect = container.getBoundingClientRect();
+        slot.style.position = 'fixed';
+        slot.style.left = rect.left + 'px';
+        slot.style.top = rect.top + 'px';
+        slot.style.width = rect.width + 'px';
+        slot.style.height = rect.height + 'px';
+        slot.style.zIndex = '10';
+        slot.style.display = 'flex';
+        slot.style.justifyContent = 'center';
+        slot.style.alignItems = 'center';
+    }
+    // 最終ページがアクティブかつ ad-spacer 幅 >= slot 幅なら .ad-spacer 位置に表示。それ以外は画面外へ。
+    function updateAdSlotVisibility() {
+        if (!isAdsenseAvailable()) return;
+        var slot = document.getElementById('adsense-slot');
+        if (!slot) return;
+        var container = document.querySelector('#last_page .ad-spacer');
+        try {
+            var slick = $slider.slick('getSlick');
+            var ins = getAdsenseIns();
+            var onLast = isLastPageVisible(slick);
+            var adReady = ins && isAdsenseRendered(ins) && ins.closest('#adsense-slot');
+            var containerW = container ? container.getBoundingClientRect().width : 0;
+            var slotW = adsenseSlotWidthBeforePush > 0 ? adsenseSlotWidthBeforePush : (slot.getBoundingClientRect().width || ADSENSE_SLOT_DEFAULT_WIDTH_PX);
+            var wideEnough = containerW >= slotW;
+            var showOnContainer = onLast && adReady && wideEnough;
+            if (showOnContainer) {
+                positionSlotOverAdSpacer();
+            } else {
+                slot.style.position = 'fixed';
+                slot.style.left = ADSENSE_SLOT_OFFSCREEN;
+                slot.style.top = ADSENSE_SLOT_OFFSCREEN;
+                if (container && (!adReady || (onLast && !wideEnough))) container.style.minHeight = '0';
+            }
+        } catch (e) {
+            slot.style.position = 'fixed';
+            slot.style.left = ADSENSE_SLOT_OFFSCREEN;
+            slot.style.top = ADSENSE_SLOT_OFFSCREEN;
+            if (container) container.style.minHeight = '0';
+        }
+    }
+    // ins の data-adsbygoogle-status が "done" になったら slot 幅を再適用し、ad-spacer に高さを入れる。表示は updateAdSlotVisibility で行う。初回だけ 2 フレーム後に再実行して位置を確定。
+    function observeAdsenseDoneThenMove(ins) {
+        if (!ins || !isAdsenseAvailable()) return;
+        var slot = document.getElementById('adsense-slot');
+        function doPosition() {
+            if (!slot) return;
+            if (adsenseSlotWidthBeforePush > 0) {
+                slot.style.width = adsenseSlotWidthBeforePush + 'px';
+                slot.style.height = ADSENSE_SLOT_DEFAULT_HEIGHT_PX + 'px';
+            }
+            var container = document.querySelector('#last_page .ad-spacer');
+            if (container) {
+                var slotH = slot.offsetHeight || slot.getBoundingClientRect().height || ADSENSE_SLOT_DEFAULT_HEIGHT_PX;
+                container.style.minHeight = slotH + 'px';
+            }
+            updateAdSlotVisibility();
+            if (!adsensePositionedOnce) {
+                adsensePositionedOnce = true;
+                requestAnimationFrame(function() {
+                    requestAnimationFrame(updateAdSlotVisibility);
+                });
+            }
+        }
+        if (ins.getAttribute('data-adsbygoogle-status') === 'done') {
+            doPosition();
+            return;
+        }
+        var observer = new MutationObserver(function(mutations) {
+            if (ins.getAttribute('data-adsbygoogle-status') === 'done') {
+                observer.disconnect();
+                doPosition();
+            }
+        });
+        observer.observe(ins, { attributes: true, attributeFilter: ['data-adsbygoogle-status'] });
+    }
+    function isAdsenseRendered(ins) {
+        return !!(ins && ins.getAttribute('data-adsbygoogle-status') === 'done');
+    }
+    function isLastPageVisible(slick) {
+        if (!slick) return false;
+        var $lastSlide = $('#last_page').closest('.slick-slide');
+        return ($lastSlide.length > 0) && ($lastSlide.hasClass('slick-active') || $lastSlide.hasClass('slick-current'));
+    }
+    function canRenderAdsenseNow(ins) {
+        if (!ADSENSE_CONFIG.enabled) return false;
+        if (!ins || !ins.isConnected) return false;
+        if (isAdsenseRendered(ins)) return false;
+        if (!window.__adsenseScriptLoaded) return false;
+        var container = ins.parentElement;
+        if (!container) return false;
+        if ($slider[0] && $slider[0].offsetWidth <= 0) return false;
+        var cW = container.getBoundingClientRect().width;
+        if (cW < ADSENSE_CONFIG.minContainerWidthPx) return false;
+        return true;
+    }
+    function attemptRenderAdsense() {
+        if (!isAdsenseAvailable()) return;
+        var ins = getAdsenseIns();
+        if (!ins) return;
+        // すでに描画済み: slot にあれば表示状態だけ更新（位置は最終ページのとき updateAdSlotVisibility で行う）。
+        if (isAdsenseRendered(ins)) {
+            if (ins.closest('#adsense-slot')) updateAdSlotVisibility();
+            return;
+        }
+        ensureAdSlotSize();
+        if (canRenderAdsenseNow(ins)) {
+            try {
+                (window.adsbygoogle = window.adsbygoogle || []).push({});
+                observeAdsenseDoneThenMove(ins);
+            } catch (e) {}
+            return;
+        }
+        if (adsenseRetryCount++ >= ADSENSE_CONFIG.maxAttempts) return;
+        adsenseRetryTimer = setTimeout(attemptRenderAdsense, ADSENSE_CONFIG.retryDelayMs);
+    }
+    function scheduleRenderAdsense() {
+        if (!isAdsenseAvailable()) return;
+        clearAdsenseRetry();
+        attemptRenderAdsense();
+    }
+    // スライダーが位置を計算し直すたびに発火し、AdSense 表示状態を更新する。
+    function adsenseOnSetPosition() {
+        if (isAdsenseAvailable()) updateAdSlotVisibility();
+    }
+    // 最終ページから離れるめくり直前の処理。slot を画面外へ。
+    function adsenseOnBeforeChange(slick, currentSlide, nextSlide) {
+        if (!isAdsenseAvailable() || currentSlide === nextSlide) return;
+        var $lastSlide = $('#last_page').closest('.slick-slide');
+        var lastSlideIndex = $lastSlide.length ? parseInt($lastSlide.attr('data-slick-index'), 10) : -1;
+        if (lastSlideIndex < 0) return;
+        var n = slick.options.slidesToShow || 1;
+        var lastPageVisibleNow = lastSlideIndex >= currentSlide && lastSlideIndex < currentSlide + n;
+        var lastPageVisibleAfter = lastSlideIndex >= nextSlide && lastSlideIndex < nextSlide + n;
+        if (lastPageVisibleNow && !lastPageVisibleAfter) {
+            var slot = document.getElementById('adsense-slot');
+            if (slot) {
+                slot.style.position = 'fixed';
+                slot.style.left = ADSENSE_SLOT_OFFSCREEN;
+                slot.style.top = ADSENSE_SLOT_OFFSCREEN;
+            }
+        }
+    }
+    // 最終ページから離れるめくり後の処理。
+    function adsenseOnAfterChange(slick) {
+        if (!isAdsenseAvailable()) return;
+        if (slick.currentSlide === adsenseLastSlideIndex) return;
+        adsenseLastSlideIndex = slick.currentSlide;
+        if (!isLastPageVisible(slick)) clearAdsenseRetry();
+        updateAdSlotVisibility();
+    }
+    // 初回ロード時：push と最終ページ表示時のインデックス初期化。
+    function adsenseOnInit() {
+        if (!isAdsenseAvailable()) return;
+        scheduleRenderAdsense();
+        try {
+            var slick = $slider.slick('getSlick');
+            if (slick && isLastPageVisible(slick)) adsenseLastSlideIndex = slick.currentSlide;
+        } catch (e) {}
+    }
+    // リサイズ時、表示状態更新。
+    function adsenseOnResize() {
+        if (!isAdsenseAvailable()) return;
+        try {
+            var slick = $slider.slick('getSlick');
+            if (slick && isLastPageVisible(slick)) positionSlotOverAdSpacer();
+            updateAdSlotVisibility();
+        } catch (e) {}
+    }
+    function getEdgeZoneForBar() {
+        try {
+            if ($slider.hasClass('slick-initialized')) {
+                var n = $slider.slick('getSlick').options.slidesToShow;
+                return n === 1 ? PAGE_BAR_CONFIG.edgeZoneNarrow : PAGE_BAR_CONFIG.edgeZoneWide;
+            }
+        } catch (e) {}
+        var r = $slider[0] && $slider[0].getBoundingClientRect();
+        var w = (r && r.width) ? r.width : $(window).width();
+        return w <= PAGE_BAR_CONFIG.breakpointWidth ? PAGE_BAR_CONFIG.edgeZoneNarrow : PAGE_BAR_CONFIG.edgeZoneWide;
+    }
+
 //***端末別処理***
     if(agent.search(/iPhone/) != -1 || agent.search(/iPad/) != -1 || agent.search(/iPod/) != -1 || agent.search(/Android/) != -1 || (agent.search(/Macintosh/) != -1 && 'ontouchend' in document)){
-        //***スマホ・タブレット時***
+        // スマホ・タブレット時
         $(".sp_none").hide();
         var edgeTapStartX = 0, edgeTapStartY = 0;
         var pinchActive = false;
