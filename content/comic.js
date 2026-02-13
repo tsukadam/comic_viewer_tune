@@ -416,8 +416,8 @@ $(function(){
         retryDelayMs: 250,
         maxAttempts: 12
     };
-    var ADSENSE_SLOT_DEFAULT_WIDTH_PX = 320;   // #adsense-slot の幅フォールバック（最小レクタングル想定）
-    var ADSENSE_SLOT_DEFAULT_HEIGHT_PX = 280;  // #adsense-slot の高さフォールバック
+    var ADSENSE_SLOT_DEFAULT_WIDTH_PX = 200;   // #adsense-slot の幅フォールバック
+    var ADSENSE_SLOT_DEFAULT_HEIGHT_PX = 200;  // #adsense-slot の高さフォールバック
     var adsenseRetryTimer = null;
     var adsenseResizeTimer = null;  // リサイズ debounce 用。
     var adsenseRetryCount = 0;
@@ -469,7 +469,11 @@ $(function(){
         var container = document.querySelector('#last_page .ad-spacer');
         var slot = document.getElementById('adsense-slot');
         if (!container || !slot) return;
-        var slotH = slot.offsetHeight || slot.getBoundingClientRect().height || ADSENSE_SLOT_DEFAULT_HEIGHT_PX;
+        var ins = getAdsenseIns();
+        // 実際の広告（ins要素）の高さを優先的に取得。取得できない場合はslot要素の高さを使用
+        var slotH = (ins && ins.offsetHeight > 0) ? ins.offsetHeight : 
+                    (ins && ins.getBoundingClientRect().height > 0) ? ins.getBoundingClientRect().height :
+                    (slot.offsetHeight || slot.getBoundingClientRect().height || ADSENSE_SLOT_DEFAULT_HEIGHT_PX);
         container.style.minHeight = slotH + 'px';
         var rect = container.getBoundingClientRect();
         slot.style.position = 'fixed';
@@ -524,8 +528,18 @@ $(function(){
             }
             var container = document.querySelector('#last_page .ad-spacer');
             if (container) {
-                var slotH = slot.offsetHeight || slot.getBoundingClientRect().height || ADSENSE_SLOT_DEFAULT_HEIGHT_PX;
-                container.style.minHeight = slotH + 'px';
+                // 幅判定を行い、表示可能な場合のみminHeightを設定
+                var containerW = container.getBoundingClientRect().width || 0;
+                var slotW = adsenseSlotWidthBeforePush > 0 ? adsenseSlotWidthBeforePush : (slot.getBoundingClientRect().width || ADSENSE_SLOT_DEFAULT_WIDTH_PX);
+                var wideEnough = containerW >= slotW;
+                if (wideEnough) {
+                    var ins = getAdsenseIns();
+                    // 実際の広告（ins要素）の高さを優先的に取得。取得できない場合はslot要素の高さを使用
+                    var slotH = (ins && ins.offsetHeight > 0) ? ins.offsetHeight : 
+                                (ins && ins.getBoundingClientRect().height > 0) ? ins.getBoundingClientRect().height :
+                                (slot.offsetHeight || slot.getBoundingClientRect().height || ADSENSE_SLOT_DEFAULT_HEIGHT_PX);
+                    container.style.minHeight = slotH + 'px';
+                }
             }
             updateAdSlotVisibility();
             if (!adsensePositionedOnce) {

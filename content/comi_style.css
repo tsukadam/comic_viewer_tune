@@ -52,6 +52,11 @@ img{
 .slick-slide:nth-child(odd) .c_i>div{
     justify-content: flex-end;
 }
+/* 単ページ表示時はセンタリング */
+.single-page-view .slick-slide .c_i>div,
+.single-page-view .slick-slide:nth-child(odd) .c_i>div{
+    justify-content: center;
+}
 .slick-slide .c_i img{
     max-width:100%;
     max-height:100%;
