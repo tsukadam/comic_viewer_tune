@@ -1,0 +1,396 @@
+@charset "utf-8";
+/*
+ * This file has multiple authors. See the license block at the end of content/comic.js.
+ */
+
+:root {
+    --breakpoint-px: 768px;
+}
+
+html {
+    /*ブラウザ機能によるダブルタップズームを抑止*/
+    -ms-touch-action: manipulation;
+    touch-action: manipulation;
+}
+html,body{
+    height: 100%;
+}
+body{
+    background-color: #727272;
+    margin: 0;
+    font-family: Verdana, Arial, "メイリオ","ヒラギノ角ゴ Pro W3", "Osaka", "ＭＳ Ｐゴシック", sans-serif,'g_icon';
+}
+img{
+    border: none;
+    backface-visibility: hidden; /*chromeでの画像にじみ防止*/
+}
+
+/***スライダー土台**********************************************/
+.slider{
+    background-color: #727272;
+    height: 100%;
+    display: none;
+    transition: display .3s linear;
+}
+.slider.slick-initialized{
+    display: block;
+}
+
+/***メイン画像部分**********************************************/
+/* 縦センタリング用に .slider 配下の div を 100% 高さにしておく */
+.slider div{
+    height: 100%;
+}
+.slick-slide:focus {
+    outline: none;
+}
+.slick-slide .c_i>div{
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+}
+.slick-slide:nth-child(odd) .c_i>div{
+    justify-content: flex-end;
+}
+/* 単ページ表示時はセンタリング */
+.single-page-view .slick-slide .c_i>div,
+.single-page-view .slick-slide:nth-child(odd) .c_i>div{
+    justify-content: center;
+}
+.slick-slide .c_i img{
+    max-width:100%;
+    max-height:100%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+.slider div .last_page_in{
+    line-height: 1;
+    margin: 0 10%;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+}
+.slider div .last_page_in > div{
+    height: auto;
+    width: 100%;
+    max-width: 100%;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+/* 広告用スペーサー（高さ確保。実際の広告は #adsense-slot をここに重ねて表示） */
+.slider div .last_page_in .ad-spacer{
+    /* last_page_in 周辺が flex を多用するため、スペーサーが flex で潰れないよう固定する */
+    display: block;
+    width: 100%;
+    margin: 0 auto;
+}
+.slider div .last_page_in img{
+    max-width: 100%;
+    height: auto;
+}
+.slider div .last_page_in h1,
+.slider div .last_page_in small,
+.slider div .last_page_in p{
+    text-align: center;
+}
+.slider div .last_page_in p{
+    margin: 0 0 0.7em;
+}
+
+@media (max-width: var(--breakpoint-px)) {/*指定幅以下になった時*/
+    .slick-slide .c_i>div,.slick-slide:nth-child(odd) .c_i>div{
+        justify-content: center;
+    }
+    .slider div .last_page_in{
+        margin: 0 2%;
+    }
+}
+
+/***Dots**********************************************/
+.slick-dots{
+    padding: 0;
+    margin: 0 auto;
+    list-style: none;
+    display: flex;
+    width: 98%;
+    height: 14px;
+    border-radius: 25px;
+    overflow: hidden;
+}
+.slick-dots li{
+    position: relative;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+}
+.slick-dots li button{
+    font-size: 0;
+    line-height: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    cursor: pointer;
+    color: transparent;
+    border: 0;
+    outline: none;
+    background: #555555;
+    transition: .1s;
+}
+.slick-dots li button:hover,
+.slick-dots li button:focus{
+    outline: none;
+    background: #fff;
+}
+.slick-dots li.slick-active button{
+    background: #ccc;
+}
+
+/***矢印**********************************************/
+/* 親 .slide-arrow はタッチ判定用のみ（comic.js で top/height/幅を設定）。表示は ::after で*/
+.slide-arrow{
+    opacity: 0;
+    z-index: 10; /* ページバーより背面にして、バー表示中はバー側の判定を最優先にする */
+    height: 100%;
+    width: 35%;
+    position: absolute;
+    top: 0;
+    cursor: pointer;
+    font-size: 3em;
+    box-sizing: border-box;
+    color: #fff;
+    text-shadow: 0 0 10px rgba(0,0,0,0.7);
+}
+.slide-arrow.hover{
+    opacity: 1;
+}
+.next-arrow{
+    left: 0;
+}
+.next-arrow span::before{
+    content: '\e902';
+}
+.prev-arrow{
+    right: 0;
+}
+.prev-arrow span::before{
+    content: '\e903';
+}
+/* 表示は ::after に一本化するため span は非表示（単ページ・見開き共通） */
+.slide-arrow.next-arrow span,
+.slide-arrow.prev-arrow span{
+    visibility: hidden;
+}
+/* 無効時は消さず不可視・無反応にしてレイアウトを維持（表示時の位置チラつき防止）。 */
+.slide-arrow.slick-disabled{
+    visibility: hidden;
+    pointer-events: none;
+}
+/* 矢印の見た目：fixed＋top:50% translateY(-50%) で画面の上下中央に固定 */
+.slide-arrow.next-arrow::after{
+    content: '\e902';
+    position: fixed;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: calc(var(--arrow-zone-pct, 35) * 1%);
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    direction: ltr;
+    padding-left: var(--arrow-visual-edge-padding, 30px);
+    box-sizing: border-box;
+    color: inherit;
+    font-size: inherit;
+    font-family: inherit;
+    text-shadow: inherit;
+    pointer-events: none;
+}
+.slide-arrow.prev-arrow::after{
+    content: '\e903';
+    position: fixed;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: calc(var(--arrow-zone-pct, 35) * 1%);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    direction: ltr;
+    padding-right: var(--arrow-visual-edge-padding, 30px);
+    box-sizing: border-box;
+    color: inherit;
+    font-size: inherit;
+    font-family: inherit;
+    text-shadow: inherit;
+    pointer-events: none;
+}
+@media (max-width: var(--breakpoint-px)) {/*指定幅以下になった時*/
+    .slide-arrow{
+        font-size: 2em;
+    }
+}
+
+/***タイトル・コピーライト**********************************************/
+h1{
+    font-size: 1.9em;
+    font-weight:bold;
+    line-height: 1.2em;
+}
+small{
+    font-size: 0.8em;
+    display: block;
+    margin-bottom: 16px;
+}
+
+/***ボタン**********************************************/
+.button{
+    -webkit-appearance: none;
+    margin: 0 2px;
+    width: 120px;
+    background-color: #000;
+    border: 2px solid #888;
+    color: #CCC;
+    font-size: 0.875em;
+    line-height: 1.5;
+    display: inline-block;
+    text-align: center;
+    text-decoration: none;
+    outline: none;
+    cursor: pointer;
+    border-radius: 20px;
+    transition: all .3s;
+    box-sizing: border-box;
+    padding: 4px 0;
+}
+@media (min-width: calc(var(--breakpoint-px) + 1px)) {/*指定幅以上の時*/
+    .button:hover{
+        background-color: #fff;
+        border-color: #59b1eb;
+        color: #59b1eb;
+    }
+    .button.orange:hover{
+        background-color: #fff;
+        border-color: #F65B5B;
+        color: #F65B5B;
+    }
+
+}
+
+/* 最終ページ用サムネ */
+.thumb{
+    width: 200px;
+    height: 200px;
+    margin: 10px 0;
+}
+
+/* 最終ページ用ボタン幅 */
+.button.under_thumb{
+    width: 200px;
+}
+
+/***ページバー**********************************************/
+.page-bar-overlay{
+    --page-bar-box-bg: rgba(0,0,0,0.8);
+    --page-bar-box-color: #ccc;
+    --page-bar-box-padding-top: 8px;
+    --page-bar-box-padding-bottom: 12px;
+    --page-bar-counter-margin-bottom: 8px;
+    --page-bar-dots-height: 8px;
+
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity ease;
+}
+.page-bar-overlay:not(.page-bar-visible) .page-bar-box .slick-dots li button::before{
+    /* バー非表示時は透明ヒット領域も無効化 */
+    pointer-events: none;
+}
+.page-bar-overlay.page-bar-visible{
+    opacity: 1;
+    pointer-events: auto;
+}
+.page-bar-backdrop{
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    cursor: pointer;
+}
+.page-bar-box{
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    background-color: var(--page-bar-box-bg);
+    color: var(--page-bar-box-color);
+    text-align: center;
+    padding: var(--page-bar-box-padding-top) 0 var(--page-bar-box-padding-bottom);
+    box-sizing: border-box;
+}
+.page-bar-box .slick-counter{
+    margin: 0 0 var(--page-bar-counter-margin-bottom);
+    font-weight: normal;
+    font-size: 0.8em;
+}
+.page-bar-box .dots{
+    margin: 0 auto 0;
+}
+/* バー左＝最終ページ側、右＝1P側にするためドット並びを反転 */
+.page-bar-box .slick-dots{
+    flex-direction: row-reverse;
+    height: var(--page-bar-dots-height);
+    /* ドットの判定領域を上下に少しはみ出させるため、ここだけ overflow を外す */
+    overflow: visible;
+}
+.page-bar-box .slick-dots li button{
+    -webkit-tap-highlight-color: transparent;
+    position: relative; /* 擬似要素の基準にする */
+}
+/* ドットの上下に透明のヒット領域を広げる */
+.page-bar-box .slick-dots li button::before{
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -30px;
+    bottom: -30px;
+    background: transparent;
+    pointer-events: auto;
+}
+/* 非アクティブのドット */
+.page-bar-box .slick-dots li button:hover,
+.page-bar-box .slick-dots li button:focus,
+.page-bar-box .slick-dots li button:active{
+    background: #555555;
+}
+/* アクティブのドット */
+.page-bar-box .slick-dots li.slick-active button,
+.page-bar-box .slick-dots li.slick-active button:hover,
+.page-bar-box .slick-dots li.slick-active button:focus,
+.page-bar-box .slick-dots li.slick-active button:active{
+    background: #cccccc;
+}
+
+/***ページバー内**********************************************/
+.slick-counter{
+    margin: 22px 0 8px;
+}
+.dots{
+    margin: 0 0 16px;
+}
+
+@media (max-width: var(--breakpoint-px)) {/*指定幅以下になった時*/
+    h1{
+        font-size: 1.6em;
+    }
+}
