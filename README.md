@@ -29,7 +29,7 @@
 
 1. 各作品用に **content** 以下に任意の名前のフォルダを用意し、連番画像（1.png, 2.png, …）と **index.html** を置く。
 2. index.html の冒頭でページ数などを設定。
-3. パスに合わせて `../comi_style.css`, `../comic.js` およびルートの `slick.css`, `jquery-3.6.0.min.js`, `slick.min.mjs`, `slick-swipe-custom.js` を読み込む。
+3. サーバーに置いて**index.html**にアクセスするとビューアー表示されます。
 
 ---
 
@@ -64,4 +64,4 @@ Adsenseコードは自分の親要素たちのスタイルにheight:auto !import
 - **jQuery**: [jQuery](https://jquery.com/)（MIT）
 - **Slick**: [kenwheeler/slick](https://github.com/kenwheeler/slick)（MIT）
 
-本リポジトリの改変部分もMITライセンスとします。詳細は content/comic.js 末尾のライセンス記述を参照してください。
+本リポジトリの改変部分もMITライセンスとします。詳細は[LISENCE.txt](https://github.com/tsukadam/comic_viewer_tune/blob/24389fbc91ee29c067d00ed1f9da0d03e430307b/LICENSE.txt) を参照してください。
