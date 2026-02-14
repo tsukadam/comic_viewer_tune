@@ -7,7 +7,7 @@
 
 # ダウンロード
 
--Release(https://github.com/tsukadam/comic_viewer_tune/releases)から最新版を落としてください。一番上のcomic_viewer_tune_日付.zip が配布用の一式です。
+-[Release](https://github.com/tsukadam/comic_viewer_tune/releases) から最新版を落としてください。一番上のcomic_viewer_tune_日付.zip が配布用の一式です。
 
 ---
 
