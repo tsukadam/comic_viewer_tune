@@ -169,21 +169,21 @@ img{
 .slide-arrow.hover{
     opacity: 1;
 }
-.next-arrow{
+.left-arrow{
     left: 0;
 }
-.next-arrow span::before{
+.left-arrow span::before{
     content: '\e902';
 }
-.prev-arrow{
+.right-arrow{
     right: 0;
 }
-.prev-arrow span::before{
+.right-arrow span::before{
     content: '\e903';
 }
 /* 表示は ::after に一本化するため span は非表示（単ページ・見開き共通） */
-.slide-arrow.next-arrow span,
-.slide-arrow.prev-arrow span{
+.slide-arrow.left-arrow span,
+.slide-arrow.right-arrow span{
     visibility: hidden;
 }
 /* 無効時は消さず不可視・無反応にしてレイアウトを維持（表示時の位置チラつき防止）。 */
@@ -192,7 +192,7 @@ img{
     pointer-events: none;
 }
 /* 矢印の見た目：fixed＋top:50% translateY(-50%) で画面の上下中央に固定 */
-.slide-arrow.next-arrow::after{
+.slide-arrow.left-arrow::after{
     content: '\e902';
     position: fixed;
     left: 0;
@@ -211,7 +211,7 @@ img{
     text-shadow: inherit;
     pointer-events: none;
 }
-.slide-arrow.prev-arrow::after{
+.slide-arrow.right-arrow::after{
     content: '\e903';
     position: fixed;
     right: 0;

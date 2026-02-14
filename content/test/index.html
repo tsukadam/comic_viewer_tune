@@ -16,7 +16,8 @@
         var site = "テストサイトアドレス"; //サイトのURL
         var copy = "テスト作者名"; //作者名
         var comment = "テストコメント"; //コメント
-        var display = 0; //左ページ始まりは「0」、右ページ始まりは「1」
+        var right_to_left = 1; // 1=RTL（右→左）, 0=LTR（左→右）
+        var leftstart = 1;    // RTL時: 1=見開きまたぎ, 0=またがず。LTR時: 1=またがず, 0=見開きまたぎ
         /** ここまで **/
         
         $(function(){

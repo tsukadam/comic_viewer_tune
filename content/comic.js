@@ -20,6 +20,19 @@ $(function(){
     var pageBarHideTimer = null;
     var pageBarTouchStartSlide = null;
     var pageBarCachedHeight = 0;
+
+    // right_to_left: 1=RTL, 0=LTR。leftstart: RTL時 1=見開きまたぎ・0=またがず, LTR時 1=またがず・0=またぎ。未定義時は display で互換。config は __comicDebugReload で再読込可能。
+    function readComicConfig() {
+        var rtl = (typeof window.right_to_left !== 'undefined') ? (window.right_to_left === 1) : true;
+        var start;
+        if (typeof window.leftstart !== 'undefined') {
+            start = rtl ? (window.leftstart === 1) : (window.leftstart === 0);
+        } else {
+            start = (typeof window.display !== 'undefined' && window.display === 0);
+        }
+        return { directionRtl: rtl, spreadCrossingStart: start };
+    }
+    var config = readComicConfig();
     
 // URLのパラメータを取得（?p=n）
     var urlParam = location.search.substring(1);
@@ -37,13 +50,13 @@ $(function(){
     num = num - 1;
     if(width <= BREAKPOINT_PX){
     } else {
-        if(display === 1){ //右ページ始まりの時
+        if (!config.spreadCrossingStart) { // 見開きをまたがない始まり
             if (num % 2 == 0) {// 偶数の処理
             }
             else {// 奇数の処理
                 num = num - 1;
             }
-        }else { //左ページ始まりの時
+        } else { // 見開きまたぎ始まり
             if (num % 2 == 0) {// 偶数の処理
             }
             else {// 奇数の処理
@@ -51,6 +64,7 @@ $(function(){
             }
         }
     }
+    
     
 //*** slick設定・メイン動作コンフィグ***
     // 単ページ表示・見開き表示のブレークポイント
@@ -105,9 +119,9 @@ $(function(){
         return 'center';
     }
     
-    // 見開き時の「右ページ」か（display: 0=左始まり, 1=右始まり。pageNum は 1 始まりのページ番号）
-    function isRightPage(pageNum) {
-        return (display === 0 && pageNum % 2 === 0) || (display === 1 && pageNum % 2 === 1);
+    // 見開き時の「Prev 側のページ」か（RTLでは右側、LTRでは左側に表示される。spreadCrossingStart で偶奇を決める。pageNum は 1 始まり）
+    function isSpreadPrevPage(pageNum) {
+        return (config.spreadCrossingStart && pageNum % 2 === 0) || (!config.spreadCrossingStart && pageNum % 2 === 1);
     }
 
     var slickCommonOptions = {
@@ -116,15 +130,16 @@ $(function(){
         accessibility: false,
         dots: true,
         appendDots: $('.dots'),
-        prevArrow: '<div class="slide-arrow prev-arrow"><span></span></div>',
-        nextArrow: '<div class="slide-arrow next-arrow"><span></span></div>',
+        prevArrow: '<div class="slide-arrow right-arrow"><span></span></div>',
+        nextArrow: '<div class="slide-arrow left-arrow"><span></span></div>',
         touchThreshold: 10,
         lazyLoad: 'progressive',
         infinite: false,
-        rtl: true
+        rtl: config.directionRtl
     };
 
     function sliderSetting(){
+        $slider.attr('dir', config.directionRtl ? 'rtl' : 'ltr');
         var currentSlide = num;
         var wasInitialized = $slider.hasClass('slick-initialized');
         var wasSinglePage = false;
@@ -153,7 +168,7 @@ $(function(){
                 if(hadFirstPage && currentSlide === 0){
                     currentSlide = currentSlide;
                 } else {
-                    if (isRightPage(page) && currentSlide > 0) {
+                    if (isSpreadPrevPage(page) && currentSlide > 0) {
                         currentSlide = currentSlide;
                     }
                 }
@@ -167,11 +182,11 @@ $(function(){
             total_minus = 1;
             $('body').addClass('single-page-view');
         } else{ 
-            if(display === 1 && $("#first_page").length > 0){
+            if (!config.spreadCrossingStart && $("#first_page").length > 0){
                 $("#first_page").remove();
                 currentSlide = Math.max(0, currentSlide - 1);
             }
-            if(display === 0 && $("#first_page").length === 0){
+            if (config.spreadCrossingStart && $("#first_page").length === 0){
                 $slider.prepend(firstPageHtml);
                 currentSlide = currentSlide + 1;
             }
@@ -179,9 +194,9 @@ $(function(){
             if (wasInitialized && wasSinglePage) {
                 var hasFirst = ($("#first_page").length > 0);
                 var page = hasFirst ? currentSlide : currentSlide + 1;
-                if (isRightPage(page) && currentSlide > 0) {
+                if (isSpreadPrevPage(page) && currentSlide > 0) {
                     currentSlide = currentSlide;
-                } else if (!isRightPage(page) && currentSlide > 0) {
+                } else if (!isSpreadPrevPage(page) && currentSlide > 0) {
                     currentSlide = currentSlide - 1;
                 }
             }         
@@ -214,9 +229,9 @@ $(function(){
                 '--arrow-visual-edge-padding': edgePad + 'px'
             });
             $('.current').text(slick.currentSlide + 1);
-            if(display === 1){ //右ページ始まりの時
+            if (!config.spreadCrossingStart) { // 見開きをまたがない
                 $('.total').text(slick.slideCount - total_minus + 1);
-            } else { //左ページ始まりの時
+            } else { // 見開きまたぎ始まり
                 $('.total').text(slick.slideCount - total_minus);
             }
             adsenseOnSetPosition();
@@ -235,6 +250,16 @@ $(function(){
     }
  
     sliderSetting();
+
+    // デバッグ用: コンソールで right_to_left / leftstart を変えたあと __comicDebugReload() で再適用する。カレントは先頭に戻す。
+    window.__comicDebugReload = function() {
+        var next = readComicConfig();
+        config.directionRtl = next.directionRtl;
+        config.spreadCrossingStart = next.spreadCrossingStart;
+        sliderSetting();
+        var firstIndex = ($("#first_page").length > 0) ? 1 : 0;
+        try { $slider.slick('slickGoTo', firstIndex); } catch(err) {}
+    };
     
     // リサイズ時は「単ページ⇔見開き」が切り替わる時だけ再初期化。それ以外は変化終了 0.5 秒後に再位置合わせ（push はしないので随時発火でもよいが、連続リサイズ時の負荷を抑えるため debounce）。
     var lastIsSinglePage = (($(window).width() <= BREAKPOINT_PX) || isMobileDevice);
@@ -261,8 +286,8 @@ $(function(){
         $(document).on('mousemove.arrowHover', function(e) {
             var z = getTapZone(e.clientX, e.clientY);
             $('.slide-arrow').removeClass('hover');
-            if (z === 'left') $('.slide-arrow.next-arrow').addClass('hover');
-            else if (z === 'right') $('.slide-arrow.prev-arrow').addClass('hover');
+            if (z === 'left') $('.slide-arrow.left-arrow').addClass('hover');
+            else if (z === 'right') $('.slide-arrow.right-arrow').addClass('hover');
         });
     }
 
