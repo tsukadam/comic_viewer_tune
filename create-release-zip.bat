@@ -34,10 +34,6 @@ if exist "%SCRIPT_DIR%jquery-3.6.0.min.js" (
     copy /Y "%SCRIPT_DIR%jquery-3.6.0.min.js" "%TEMP_DIR%\" >nul 2>&1 && echo   OK: jquery-3.6.0.min.js || echo   FAIL: jquery-3.6.0.min.js
 )
 
-if exist "%SCRIPT_DIR%slick.min.js" (
-    copy /Y "%SCRIPT_DIR%slick.min.js" "%TEMP_DIR%\" >nul 2>&1 && echo   OK: slick.min.js || echo   FAIL: slick.min.js
-)
-
 if exist "%SCRIPT_DIR%slick.min.mjs" (
     copy /Y "%SCRIPT_DIR%slick.min.mjs" "%TEMP_DIR%\" >nul 2>&1 && echo   OK: slick.min.mjs || echo   FAIL: slick.min.mjs
 )
@@ -79,8 +75,8 @@ if exist "%SCRIPT_DIR%content\sample" (
     xcopy /E /I /H /Y "%SCRIPT_DIR%content\sample" "%CONTENT_DIR%\sample\" >nul 2>&1 && echo   OK: content\sample\ || echo   FAIL: content\sample\
 )
 
-if exist "%SCRIPT_DIR%content\images" (
-    xcopy /E /I /H /Y "%SCRIPT_DIR%content\images" "%CONTENT_DIR%\images\" >nul 2>&1 && echo   OK: content\images\ || echo   FAIL: content\images\
+if exist "%SCRIPT_DIR%images" (
+    xcopy /E /I /H /Y "%SCRIPT_DIR%images" "%TEMP_DIR%\images\" >nul 2>&1 && echo   OK: images\ (root) || echo   FAIL: images\
 )
 
 echo.
