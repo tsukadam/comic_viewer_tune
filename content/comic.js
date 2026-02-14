@@ -1004,47 +1004,15 @@ $(function(){
 });
 
 /*
-This project contains code from multiple authors. Each retains their own
-copyright.
+This project contains code from multiple authors. Each retains their own copyright.
 
-The components below are each licensed under the MIT License:
+License list (all MIT):
+  - "なんかいい感じのマンガビューア～slick-custom～" — Copyright (c) 2019 hatsu kyugen
+  - Modifications and additional code in this project — Copyright (c) 2026 Kodama Totsuka
+  - jQuery — Copyright OpenJS Foundation and other contributors, https://openjsf.org/
+  - Slick Carousel — Copyright (c) 2013-2016
 
-  - "なんかいい感じのマンガビューア～slick-custom～" (hatsu kyugen) — MIT.
-    See the /***slick-custom*** block below in this file.
-  - jQuery — MIT. See jquery-3.6.0.min.js header or jquery.org/license.
-  - Slick — MIT. See slick.min.js / slick.css headers or github.com/kenwheeler/slick.
-  - Modifications and additional code in this project — MIT.
-    Copyright (c) 2026 Kodama Totsuka.
-    MIT full text in this file below.
-
-The above list and notes are for organizational purposes only, not license detail,
-except for copyright notices.
-
-If you add your own modifications and license them under MIT, add a new entry
-the list (including your copyright notice). Keep the MIT License text below as a
-single shared copy.
-
--------------------------------------------------------------------------------
-MIT License
--------------------------------------------------------------------------------
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+For the full license texts, see LICENSE.txt in the project root.
 
 /***slick-custom***
 https://guardian.bona.jp/st/cv/

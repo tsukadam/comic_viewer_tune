@@ -50,6 +50,10 @@ if exist "%SCRIPT_DIR%README.md" (
     copy /Y "%SCRIPT_DIR%README.md" "%TEMP_DIR%\" >nul 2>&1 && echo   OK: README.md || echo   FAIL: README.md
 )
 
+if exist "%SCRIPT_DIR%LICENSE.txt" (
+    copy /Y "%SCRIPT_DIR%LICENSE.txt" "%TEMP_DIR%\" >nul 2>&1 && echo   OK: LICENSE.txt || echo   FAIL: LICENSE.txt
+)
+
 echo.
 
 echo [2/4] Creating content directory...
