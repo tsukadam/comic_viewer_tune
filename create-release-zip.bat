@@ -28,23 +28,7 @@ if not exist "%TEMP_DIR%" (
     exit /b 1
 )
 
-echo [1/4] Copying root files...
-
-if exist "%SCRIPT_DIR%jquery-3.6.0.min.js" (
-    copy /Y "%SCRIPT_DIR%jquery-3.6.0.min.js" "%TEMP_DIR%\" >nul 2>&1 && echo   OK: jquery-3.6.0.min.js || echo   FAIL: jquery-3.6.0.min.js
-)
-
-if exist "%SCRIPT_DIR%slick.min.mjs" (
-    copy /Y "%SCRIPT_DIR%slick.min.mjs" "%TEMP_DIR%\" >nul 2>&1 && echo   OK: slick.min.mjs || echo   FAIL: slick.min.mjs
-)
-
-if exist "%SCRIPT_DIR%slick-swipe-custom.js" (
-    copy /Y "%SCRIPT_DIR%slick-swipe-custom.js" "%TEMP_DIR%\" >nul 2>&1 && echo   OK: slick-swipe-custom.js || echo   FAIL: slick-swipe-custom.js
-)
-
-if exist "%SCRIPT_DIR%slick.css" (
-    copy /Y "%SCRIPT_DIR%slick.css" "%TEMP_DIR%\" >nul 2>&1 && echo   OK: slick.css || echo   FAIL: slick.css
-)
+echo [1/5] Copying root files and library...
 
 if exist "%SCRIPT_DIR%README.md" (
     copy /Y "%SCRIPT_DIR%README.md" "%TEMP_DIR%\" >nul 2>&1 && echo   OK: README.md || echo   FAIL: README.md
@@ -54,9 +38,19 @@ if exist "%SCRIPT_DIR%LICENSE.txt" (
     copy /Y "%SCRIPT_DIR%LICENSE.txt" "%TEMP_DIR%\" >nul 2>&1 && echo   OK: LICENSE.txt || echo   FAIL: LICENSE.txt
 )
 
+if exist "%SCRIPT_DIR%library" (
+    xcopy /E /I /H /Y "%SCRIPT_DIR%library\*" "%TEMP_DIR%\library\" >nul 2>&1 && echo   OK: library\ || echo   FAIL: library\
+) else (
+    echo   WARN: library\ not found
+)
+
+if exist "%SCRIPT_DIR%images" (
+    xcopy /E /I /H /Y "%SCRIPT_DIR%images" "%TEMP_DIR%\images\" >nul 2>&1 && echo   OK: images\ || echo   FAIL: images\
+)
+
 echo.
 
-echo [2/4] Creating content directory...
+echo [2/5] Creating content directory...
 
 set "CONTENT_DIR=%TEMP_DIR%\content"
 mkdir "%CONTENT_DIR%" 2>nul
@@ -79,13 +73,9 @@ if exist "%SCRIPT_DIR%content\sample" (
     xcopy /E /I /H /Y "%SCRIPT_DIR%content\sample" "%CONTENT_DIR%\sample\" >nul 2>&1 && echo   OK: content\sample\ || echo   FAIL: content\sample\
 )
 
-if exist "%SCRIPT_DIR%images" (
-    xcopy /E /I /H /Y "%SCRIPT_DIR%images" "%TEMP_DIR%\images\" >nul 2>&1 && echo   OK: images\ (root) || echo   FAIL: images\
-)
-
 echo.
 
-echo [3/4] Creating release directory...
+echo [3/5] Creating release directory...
 
 if not exist "%RELEASE_DIR%" mkdir "%RELEASE_DIR%" 2>nul
 if not exist "%RELEASE_DIR%" (
@@ -97,8 +87,18 @@ if not exist "%RELEASE_DIR%" (
 
 echo [4/5] Creating ZIP file...
 
+set "ZIP_BASE=comic_viewer_tune_%DATE_STR%"
+set "ZIP_NAME=%ZIP_BASE%.zip"
 set "ZIP_PATH=%RELEASE_DIR%\%ZIP_NAME%"
-if exist "%ZIP_PATH%" del /F /Q "%ZIP_PATH%" >nul 2>&1
+set "ZIP_N=1"
+:zipname_loop
+if exist "%ZIP_PATH%" (
+    set /a ZIP_N+=1
+    set "ZIP_NAME=!ZIP_BASE!_!ZIP_N!.zip"
+    set "ZIP_PATH=%RELEASE_DIR%\!ZIP_NAME!"
+    goto zipname_loop
+)
+echo   Output: %ZIP_NAME%
 
 set "PS_EXE=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 if not exist "%PS_EXE%" (
