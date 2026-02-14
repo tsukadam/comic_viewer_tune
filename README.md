@@ -7,7 +7,7 @@
 
 # ダウンロード
 
-- [Release](https://github.com/tsukadam/comic_viewer_tune/releases) から最新版を落としてください。一番上のcomic_viewer_tune_日付.zip が配布用の一式です。
+[Release](https://github.com/tsukadam/comic_viewer_tune/releases) から最新版を落としてください。一番上のcomic_viewer_tune_日付.zip が配布用の一式です。
 
 ---
 
@@ -41,6 +41,11 @@
 
 - 2に```<script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js">```が含まれている時は、そこを除いて貼って下さい。重複不可かつロード後にフラグを立てる必要があるので、1で読み込んでいます。
 - サンプルではダミーの広告表示コードが書いてあります。それと同じタイプのコードのみ動作確認しています
+
+- 細かい話
+広告はリロード時に１回だけ、その時の画面幅に応じて読み込まれます。そのあとスクリーンサイズが変化して、広告が画面からはみ出す状態になった場合、広告は非表示になります。
+
+Adsenseコードは自分の親要素たちのスタイルにheight:auto !importantを挿入するため、普通に置くとレイアウトが崩れます。そのため、別の場所で読み込んでから最終ページの位置に動かす必要があります。めくりから一瞬遅れて表示／非表示されるのはこれが理由です。
 
 ---
 
