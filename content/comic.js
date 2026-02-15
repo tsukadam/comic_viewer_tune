@@ -67,7 +67,6 @@ $(function(){
         }
     }
     
-    
 //*** slick設定・メイン動作コンフィグ***
     // 単ページ表示・見開き表示のブレークポイント
     var BREAKPOINT_PX = 768;
@@ -158,48 +157,6 @@ $(function(){
     function isSinglePageView(w) {
         var ww = (typeof w !== 'undefined') ? w : $(window).width();
         return (ww <= BREAKPOINT_PX) || isMobileDevice;
-    }
-
-    // リロード時：進行アローを一瞬表示し脈打たせてフェードアウト。ヒント用。
-    var hintArrowTimers = [];
-    var hintArrowCurrentId = 0;
-    function startHintArrowAnimation() {
-        hintArrowCurrentId++;
-        var myId = hintArrowCurrentId;
-        hintArrowTimers.forEach(function(t) { clearTimeout(t); });
-        hintArrowTimers = [];
-        $('body').removeClass('hint-arrow-animating');
-        $('.slide-arrow').removeClass('hint-arrow-target hint-arrow-pulse hint-arrow-fadeout');
-
-        var $nextArrow = config.directionRtl ? $slider.find('.left-arrow') : $slider.find('.right-arrow');
-        if (!$nextArrow.length || $nextArrow.hasClass('slick-disabled')) return;
-
-        var cfg = ARROW_HINT_CONFIG;
-        var t1 = setTimeout(function() {
-            if (myId !== hintArrowCurrentId) return;
-            try { $slider.slick('setPosition'); } catch (e) {}
-            $('body').addClass('hint-arrow-animating');
-            $nextArrow.addClass('hint-arrow-target hint-arrow-pulse').css({
-                '--hint-pulse-duration': cfg.pulseDurationMs + 'ms',
-                '--hint-pulse-count': cfg.pulseCount
-            });
-            var t2 = setTimeout(function() {
-                if (myId !== hintArrowCurrentId) return;
-                $nextArrow.removeClass('hint-arrow-pulse').css({ '--hint-pulse-duration': '', '--hint-pulse-count': '' });
-                $nextArrow.css({ 'transition-property': 'opacity', 'transition-duration': (cfg.fadeOutMs / 1000) + 's' });
-                $nextArrow[0].offsetHeight;
-                $nextArrow.addClass('hint-arrow-fadeout');
-                var t3 = setTimeout(function() {
-                    if (myId !== hintArrowCurrentId) return;
-                    $('body').removeClass('hint-arrow-animating');
-                    $nextArrow.removeClass('hint-arrow-target hint-arrow-fadeout').css({ 'transition-property': '', 'transition-duration': '' });
-                    try { $slider.slick('setPosition'); } catch (e) {}
-                }, cfg.fadeOutMs);
-                hintArrowTimers.push(t3);
-            }, cfg.pulseCount * cfg.pulseDurationMs);
-            hintArrowTimers.push(t2);
-        }, cfg.delayMs);
-        hintArrowTimers.push(t1);
     }
 
     var slickCommonOptions = {
@@ -329,7 +286,59 @@ $(function(){
         });
         setTimeout(adsenseOnInit, 0);
     }
- 
+
+//*** アロー関連***
+    // 進行方向ヒント：リロード時に進行アローを一瞬表示してアニメーション
+    var hintArrowTimers = [];
+    var hintArrowCurrentId = 0;
+    function startHintArrowAnimation() {
+        hintArrowCurrentId++;
+        var myId = hintArrowCurrentId;
+        hintArrowTimers.forEach(function(t) { clearTimeout(t); });
+        hintArrowTimers = [];
+        $('body').removeClass('hint-arrow-animating');
+        $('.slide-arrow').removeClass('hint-arrow-target hint-arrow-pulse hint-arrow-fadeout');
+
+        var $nextArrow = config.directionRtl ? $slider.find('.left-arrow') : $slider.find('.right-arrow');
+        if (!$nextArrow.length || $nextArrow.hasClass('slick-disabled')) return;
+
+        var cfg = ARROW_HINT_CONFIG;
+        var t1 = setTimeout(function() {
+            if (myId !== hintArrowCurrentId) return;
+            try { $slider.slick('setPosition'); } catch (e) {}
+            $('body').addClass('hint-arrow-animating');
+            $nextArrow.addClass('hint-arrow-target hint-arrow-pulse').css({
+                '--hint-pulse-duration': cfg.pulseDurationMs + 'ms',
+                '--hint-pulse-count': cfg.pulseCount
+            });
+            var t2 = setTimeout(function() {
+                if (myId !== hintArrowCurrentId) return;
+                $nextArrow.removeClass('hint-arrow-pulse').css({ '--hint-pulse-duration': '', '--hint-pulse-count': '' });
+                $nextArrow.css({ 'transition-property': 'opacity', 'transition-duration': (cfg.fadeOutMs / 1000) + 's' });
+                $nextArrow[0].offsetHeight;
+                $nextArrow.addClass('hint-arrow-fadeout');
+                var t3 = setTimeout(function() {
+                    if (myId !== hintArrowCurrentId) return;
+                    $('body').removeClass('hint-arrow-animating');
+                    $nextArrow.removeClass('hint-arrow-target hint-arrow-fadeout').css({ 'transition-property': '', 'transition-duration': '' });
+                    try { $slider.slick('setPosition'); } catch (e) {}
+                }, cfg.fadeOutMs);
+                hintArrowTimers.push(t3);
+            }, cfg.pulseCount * cfg.pulseDurationMs);
+            hintArrowTimers.push(t2);
+        }, cfg.delayMs);
+        hintArrowTimers.push(t1);
+    }
+    // 矢印ホバー：矢印は pointer-events: none のため、document の mousemove で getTapZone から .hover を付ける（PC のみ）
+    if (!isTouchDevice) {
+        $(document).on('mousemove.arrowHover', function(e) {
+            var z = getTapZone(e.clientX, e.clientY);
+            $('.slide-arrow').removeClass('hover');
+            if (z === 'left') $('.slide-arrow.left-arrow').addClass('hover');
+            else if (z === 'right') $('.slide-arrow.right-arrow').addClass('hover');
+        });
+    }
+
     sliderSetting();
     startHintArrowAnimation();
 
@@ -363,16 +372,7 @@ $(function(){
         }
     });
 
-    // 矢印ホバー：矢印は pointer-events: none のため、document の mousemove で getTapZone から .hover を付ける（PC のみ）
-    if (!isTouchDevice) {
-        $(document).on('mousemove.arrowHover', function(e) {
-            var z = getTapZone(e.clientX, e.clientY);
-            $('.slide-arrow').removeClass('hover');
-            if (z === 'left') $('.slide-arrow.left-arrow').addClass('hover');
-            else if (z === 'right') $('.slide-arrow.right-arrow').addClass('hover');
-        });
-    }
-
+//*** ページバー関連***
     function isLastPageInteractive(el) { return el && $(el).closest('#last_page').length && $(el).closest('a, button, input').length; }
     var pageBarJustShownByTap = false;  // 表示させるタップで出した直後は、そのタップがバーに届いても遷移させない
     var pageBarJustHiddenByTap = false; // 消すタップ直後のタップが表示させるタップに奪われないようにする
