@@ -103,6 +103,13 @@ $(function(){
         edgePaddingSinglePx: 20,     // 単ページ時：画面端からの距離（px）
         edgePaddingWidePx: 30        // 見開き時：画面端からの距離（px）
     };
+    // リロード時の進行アローヒント（一瞬脈打ってフェードアウト）
+    var ARROW_HINT_CONFIG = {
+        delayMs: 400,                // リロードからアニメ開始までの待ち時間（ms）
+        pulseCount: 2,               // 脈打つ回数
+        pulseDurationMs: 350,        // 1回の脈の時間（ms）
+        fadeOutMs: PAGE_BAR_CONFIG.initialFadeOutDurationMs  // 上部バーと同じフェード時間
+    };
     // マウスホイール（クリックによるドラッグ/スワイプとは別）のページ送り調整
     var WHEEL_NAV_CONFIG = {
         thresholdY: 40,             // この量（累積）を超えたらページ送り
@@ -135,6 +142,48 @@ $(function(){
     function doNavByEdgeZone(zone) {
         if (zone === 'left') { if (config.directionRtl) goNext(); else goPrev(); return; }
         if (zone === 'right') { if (config.directionRtl) goPrev(); else goNext(); }
+    }
+
+    // リロード時：進行アローを一瞬表示し脈打たせてフェードアウト。ヒント用。
+    var hintArrowTimers = [];
+    var hintArrowCurrentId = 0;
+    function startHintArrowAnimation() {
+        hintArrowCurrentId++;
+        var myId = hintArrowCurrentId;
+        hintArrowTimers.forEach(function(t) { clearTimeout(t); });
+        hintArrowTimers = [];
+        $('body').removeClass('hint-arrow-animating');
+        $('.slide-arrow').removeClass('hint-arrow-target hint-arrow-pulse hint-arrow-fadeout');
+
+        var $nextArrow = config.directionRtl ? $slider.find('.left-arrow') : $slider.find('.right-arrow');
+        if (!$nextArrow.length || $nextArrow.hasClass('slick-disabled')) return;
+
+        var cfg = ARROW_HINT_CONFIG;
+        var t1 = setTimeout(function() {
+            if (myId !== hintArrowCurrentId) return;
+            try { $slider.slick('setPosition'); } catch (e) {}
+            $('body').addClass('hint-arrow-animating');
+            $nextArrow.addClass('hint-arrow-target hint-arrow-pulse').css({
+                '--hint-pulse-duration': cfg.pulseDurationMs + 'ms',
+                '--hint-pulse-count': cfg.pulseCount
+            });
+            var t2 = setTimeout(function() {
+                if (myId !== hintArrowCurrentId) return;
+                $nextArrow.removeClass('hint-arrow-pulse').css({ '--hint-pulse-duration': '', '--hint-pulse-count': '' });
+                $nextArrow.css({ 'transition-property': 'opacity', 'transition-duration': (cfg.fadeOutMs / 1000) + 's' });
+                $nextArrow[0].offsetHeight;
+                $nextArrow.addClass('hint-arrow-fadeout');
+                var t3 = setTimeout(function() {
+                    if (myId !== hintArrowCurrentId) return;
+                    $('body').removeClass('hint-arrow-animating');
+                    $nextArrow.removeClass('hint-arrow-target hint-arrow-fadeout').css({ 'transition-property': '', 'transition-duration': '' });
+                    try { $slider.slick('setPosition'); } catch (e) {}
+                }, cfg.fadeOutMs);
+                hintArrowTimers.push(t3);
+            }, cfg.pulseCount * cfg.pulseDurationMs);
+            hintArrowTimers.push(t2);
+        }, cfg.delayMs);
+        hintArrowTimers.push(t1);
     }
 
     var slickCommonOptions = {
@@ -272,6 +321,7 @@ $(function(){
     }
  
     sliderSetting();
+    startHintArrowAnimation();
 
     // デバッグ用: コンソールで right_to_left / leftstart を変えたあと __comicDebugReload() で再適用する。カレントは先頭に戻す。
     window.__comicDebugReload = function() {
@@ -281,6 +331,7 @@ $(function(){
         sliderSetting();
         var firstIndex = ($("#first_page").length > 0) ? 1 : 0;
         try { $slider.slick('slickGoTo', firstIndex); } catch(err) {}
+        startHintArrowAnimation();
     };
     
     // リサイズ時は「単ページ⇔見開き」が切り替わる時だけ再初期化。それ以外は変化終了 0.5 秒後に再位置合わせ（push はしないので随時発火でもよいが、連続リサイズ時の負荷を抑えるため debounce）。

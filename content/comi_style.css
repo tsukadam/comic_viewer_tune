@@ -235,6 +235,38 @@ img{
         font-size: 2em;
     }
 }
+/* リロード時ヒント：進行アローを一瞬表示→脈打ち→フェードアウト */
+/* 脈打ちは ::after に適用（.slide-arrow に transform を付けると position:fixed の containing block が変わり位置がずれるため） */
+.hint-arrow-animating .slide-arrow.hint-arrow-target{
+    visibility: visible !important;
+    opacity: 1;
+}
+.slide-arrow.hint-arrow-pulse.left-arrow::after{
+    animation-name: arrow-hint-pulse;
+    animation-timing-function: ease-in-out;
+    animation-duration: var(--hint-pulse-duration, 350ms);
+    animation-iteration-count: var(--hint-pulse-count, 2);
+    transform-origin: left center;
+}
+.slide-arrow.hint-arrow-pulse.right-arrow::after{
+    animation-name: arrow-hint-pulse;
+    animation-timing-function: ease-in-out;
+    animation-duration: var(--hint-pulse-duration, 350ms);
+    animation-iteration-count: var(--hint-pulse-count, 2);
+    transform-origin: right center;
+}
+@keyframes arrow-hint-pulse{
+    0%, 100%{ transform: translateY(-50%) scale(1); }
+    50%{ transform: translateY(-50%) scale(1.15); }
+}
+/* .slide-arrow に transform を付けない（上記と同様の理由） */
+.slide-arrow.hint-arrow-fadeout{
+    opacity: 0;
+}
+/* hint-arrow-fadeout 時は opacity: 0 が hint-arrow-target の opacity: 1 を上書きする（詳細度同じで後に書かれたほうが勝つ） */
+.hint-arrow-animating .slide-arrow.hint-arrow-fadeout{
+    opacity: 0;
+}
 
 /***タイトル・コピーライト**********************************************/
 h1{
