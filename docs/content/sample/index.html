@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <link href="../../library/slick.css" rel="stylesheet">
+    <link href="../../images/style.css" rel="stylesheet">
+    <link href="../comi_style.css" rel="stylesheet">
+    <script src="../../library/jquery-3.6.0.min.js"></script>
+    <script>
+        /** 入力ここから **/
+        var page = 4; //ページ数
+        var imgtype = "png"; //画像の拡張子
+        var title = "テストタイトル名"; //タイトル名
+        var site = "テストサイトアドレス"; //サイトのURL
+        var copy = "テスト作者名"; //作者名
+        var comment = "テストコメント"; //コメント
+        var right_to_left = 1; // 1=RTL（右→左に進む）,  0=LTR（左→右に進む）
+        var leftstart = 1;    // 1=左始まり, 0=右始まり
+        /** ここまで **/
+        
+        $(function(){
+            $("title,h1").text(title);
+            $(".o_button").attr("onClick", "location.href='" + site + "'");
+            $(".copy").text(copy);
+            $(".comment").text(comment);
+            for(var i=1; i<=page; i++){
+                $('#last_page').before('<div class="c_i"><div><img data-lazy="' + i + '.' + imgtype + '" src="../../images/load.gif"></div></div>'); 
+            }
+            
+            /**長すぎるからh1の方のタイトル改行したいって時var/コメントアウト解除して編集**/
+            //$("h1").html("サンプル<br>サンプル");
+             
+        });
+    </script>
+</head>
+<body>
+    <!--漫画表示ゾーンここから-->
+    <div class="slider">
+        <div id="first_page"></div>
+        <div id="last_page">
+            <div class="last_page_in">
+                <div>
+                    <!--Adsenseコード追加ゾーンに中身があるとき、ad_spacer内に表示します-->
+                    <div class="ad-spacer"></div>
+                    <!--最終ページフリー追加ゾーンここから-->                    
+
+                    <!--最終ページフリー追加ゾーンここまで-->
+                </div>
+                <h1></h1>
+                <small><span class="comment"></span></small>
+                <small>Copyright &copy; <span class="copy"></span> All Rights Reserved</small>
+                <!--最終ページにボタンを追加する場合は以下をコメントアウト解除して編集-->
+                <!--
+                <p>
+                    <a class="button" href="#">次の話へ</a>
+                    <a class="button" href="#">前の話へ</a>
+                </p>
+                -->
+                <p>
+                    <input type="button" value="もう一度読む" class="button b_button">
+                    <input type="button" value="サイトへ戻る" class="button o_button orange">
+                </p>
+            </div>
+        </div>
+    </div>
+    <!--漫画表示ゾーンここまで-->
+
+    <!--ページバー-->
+    <div id="page-bar-overlay" class="page-bar-overlay page-bar-visible">
+        <div class="page-bar-backdrop"></div>
+        <div class="page-bar-box">
+            <div class="slick-counter"><span class="current">1</span> / <span class="total">1</span></div>
+            <div class="dots"></div>
+        </div>
+    </div>    
+    
+    <!--Google Adsense関連-->
+    <div id="adsense-slot" aria-hidden="true" style="position:absolute;left:9999px;top:9999px;width:320px;height:280px;overflow:hidden;visibility:hidden;">
+        <!-- Google AdSenseコード追加ゾーンここから -->
+        <ins class="adsbygoogle" style="display:block"
+            data-ad-client="ca-pub-9668516109348519"
+            data-ad-slot="1397168732"
+            data-ad-format="auto"></ins>
+        <!-- Google AdSenseコード追加ゾーンここまで -->
+    </div>
+    <!--Google Adsenseを使いたい場合はコメントアウト解除-->    
+    <script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js" onload="window.__adsenseScriptLoaded = true;"></script>   
+    <!--コード追加ゾーンに同じadsbygoogle.jsの読み込みが含まれている場合、こっちを残して下さい-->
+
+    <script src="../../library/slick.min.js"></script>
+    <script src="../../library/slick-swipe-custom.js"></script>
+    <script src="../comic.js"></script>
+</body>
+</html>
