@@ -368,42 +368,50 @@ $(function(){
     var pageBarJustShownByTap = false;  // 表示させるタップで出した直後は、そのタップがバーに届いても遷移させない
     var pageBarJustHiddenByTap = false; // 消すタップ直後のタップが表示させるタップに奪われないようにする
     var pageBarTransitioning = false;   // フェード中に操作をロックする用
+    var pageBarTransitionEndTimer = null; // フェード終了時に transitioning を外すタイマー。show 時にキャンセルするため保持
     function schedulePageBarHide(delayMs) {
         if (pageBarHideTimer) clearTimeout(pageBarHideTimer);
         var delay = (delayMs === undefined) ? PAGE_BAR_CONFIG.idleHideMs : delayMs;
         pageBarHideTimer = setTimeout(function() {
             if (pageBarTransitioning) return;
             pageBarTransitioning = true;
-            // 消えるとき用のフェード時間に切り替え
+            if (pageBarTransitionEndTimer) { clearTimeout(pageBarTransitionEndTimer); pageBarTransitionEndTimer = null; }
             $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.fadeOutDurationMs / 1000) + 's');
             $pageBarOverlay.removeClass('page-bar-visible');
             $body.removeClass('page-bar-open');
             pageBarHideTimer = null;
-            setTimeout(function() {
+            pageBarTransitionEndTimer = setTimeout(function() {
+                pageBarTransitionEndTimer = null;
                 pageBarTransitioning = false;
-                // 次に出すときのためにフェード時間を fadeIn に戻す
                 $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.fadeInDurationMs / 1000) + 's');
             }, PAGE_BAR_CONFIG.fadeOutDurationMs);
         }, delay);
     }
     function showPageBar() {
+        if (pageBarTransitionEndTimer) { clearTimeout(pageBarTransitionEndTimer); pageBarTransitionEndTimer = null; }
+        if (pageBarHideTimer) { clearTimeout(pageBarHideTimer); pageBarHideTimer = null; }
         pageBarTransitioning = true;
         $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.fadeInDurationMs / 1000) + 's');
         $pageBarOverlay.addClass('page-bar-visible');
         $body.addClass('page-bar-open');
-        setTimeout(function() { pageBarTransitioning = false; }, PAGE_BAR_CONFIG.fadeInDurationMs);
+        pageBarTransitionEndTimer = setTimeout(function() {
+            pageBarTransitionEndTimer = null;
+            pageBarTransitioning = false;
+        }, PAGE_BAR_CONFIG.fadeInDurationMs);
         pageBarJustShownByTap = true;
         setTimeout(function() { pageBarJustShownByTap = false; }, PAGE_BAR_CONFIG.tapFlagResetMs);
         schedulePageBarHide();
         setTimeout(function() { pageBarCachedHeight = $pageBarOverlay.outerHeight(); }, 0);
     }
     function hidePageBarImmediate() {
+        if (pageBarTransitionEndTimer) { clearTimeout(pageBarTransitionEndTimer); pageBarTransitionEndTimer = null; }
         pageBarTransitioning = true;
         $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.fadeOutDurationMs / 1000) + 's');
         $pageBarOverlay.removeClass('page-bar-visible');
         $body.removeClass('page-bar-open');
         if (pageBarHideTimer) { clearTimeout(pageBarHideTimer); pageBarHideTimer = null; }
-        setTimeout(function() {
+        pageBarTransitionEndTimer = setTimeout(function() {
+            pageBarTransitionEndTimer = null;
             pageBarTransitioning = false;
             $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.fadeInDurationMs / 1000) + 's');
         }, PAGE_BAR_CONFIG.fadeOutDurationMs);
@@ -957,12 +965,14 @@ $(function(){
             var zone = getTapZone(data.clientX, data.clientY);
             if (zone === 'left' || zone === 'right') { doNavByEdgeZone(zone); return; }
             if ((zone === 'top' || zone === 'center') && $pageBarOverlay.length) {
-                if ($pageBarOverlay.hasClass('page-bar-visible') || pageBarTransitioning) {
+                if (!$pageBarOverlay.hasClass('page-bar-visible') && !pageBarJustHiddenByTap) {
+                    showPageBar();
+                    return;
+                }
+                if ($pageBarOverlay.hasClass('page-bar-visible') && !pageBarJustShownByTap) {
                     pageBarJustHiddenByTap = true;
                     setTimeout(function () { pageBarJustHiddenByTap = false; }, PAGE_BAR_CONFIG.tapFlagResetMs);
                     hidePageBarImmediate();
-                } else if (!pageBarJustHiddenByTap) {
-                    showPageBar();
                 }
             }
         });
@@ -1038,7 +1048,9 @@ $(function(){
                 }
                 if (inBarTapArea && !$pageBarOverlay.hasClass('page-bar-visible') && !pageBarJustHiddenByTap) {
                     showPageBar();
-                } else if (inBarTapArea && $pageBarOverlay.hasClass('page-bar-visible') && !pageBarTransitioning) {
+                    return;
+                }
+                if (inBarTapArea && $pageBarOverlay.hasClass('page-bar-visible') && !pageBarJustShownByTap) {
                     pageBarJustHiddenByTap = true;
                     setTimeout(function() { pageBarJustHiddenByTap = false; }, PAGE_BAR_CONFIG.tapFlagResetMs);
                     hidePageBarImmediate();
