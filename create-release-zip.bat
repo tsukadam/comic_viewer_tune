@@ -28,7 +28,7 @@ if not exist "%TEMP_DIR%" (
     exit /b 1
 )
 
-echo [1/5] Copying root files and library...
+echo [1/6] Copying root files and library...
 
 if exist "%SCRIPT_DIR%README.md" (
     copy /Y "%SCRIPT_DIR%README.md" "%TEMP_DIR%\" >nul 2>&1 && echo   OK: README.md || echo   FAIL: README.md
@@ -50,7 +50,7 @@ if exist "%SCRIPT_DIR%images" (
 
 echo.
 
-echo [2/5] Creating content directory...
+echo [2/6] Creating content directory...
 
 set "CONTENT_DIR=%TEMP_DIR%\content"
 mkdir "%CONTENT_DIR%" 2>nul
@@ -75,7 +75,7 @@ if exist "%SCRIPT_DIR%content\sample" (
 
 echo.
 
-echo [3/5] Creating release directory...
+echo [3/6] Creating release directory...
 
 if not exist "%RELEASE_DIR%" mkdir "%RELEASE_DIR%" 2>nul
 if not exist "%RELEASE_DIR%" (
@@ -85,7 +85,7 @@ if not exist "%RELEASE_DIR%" (
     exit /b 1
 )
 
-echo [4/5] Creating ZIP file...
+echo [4/6] Creating ZIP file...
 
 set "ZIP_BASE=comic_viewer_tune_%DATE_STR%"
 set "ZIP_NAME=%ZIP_BASE%.zip"
@@ -117,7 +117,29 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [5/5] Cleaning up...
+echo [5/6] Refreshing docs with release contents (keeping docs\index.html and docs\*.md)...
+set "DOCS_DIR=%SCRIPT_DIR%docs"
+set "DOCS_INDEX_BAK=%SCRIPT_DIR%docs_index_backup.html"
+if exist "%DOCS_DIR%\index.html" (
+    copy /Y "%DOCS_DIR%\index.html" "%DOCS_INDEX_BAK%" >nul 2>&1
+)
+if exist "%DOCS_DIR%\content" rmdir /s /q "%DOCS_DIR%\content" 2>nul
+if exist "%DOCS_DIR%\library" rmdir /s /q "%DOCS_DIR%\library" 2>nul
+if exist "%DOCS_DIR%\images" rmdir /s /q "%DOCS_DIR%\images" 2>nul
+if exist "%DOCS_DIR%\README.md" del /q "%DOCS_DIR%\README.md" 2>nul
+if exist "%DOCS_DIR%\LICENSE.txt" del /q "%DOCS_DIR%\LICENSE.txt" 2>nul
+if exist "%DOCS_DIR%\comic.js" del /q "%DOCS_DIR%\comic.js" 2>nul
+if exist "%DOCS_DIR%\comi_style.css" del /q "%DOCS_DIR%\comi_style.css" 2>nul
+xcopy /E /I /H /Y "%TEMP_DIR%\*" "%DOCS_DIR%\" >nul 2>&1
+if exist "%DOCS_INDEX_BAK%" (
+    copy /Y "%DOCS_INDEX_BAK%" "%DOCS_DIR%\index.html" >nul 2>&1
+    del /q "%DOCS_INDEX_BAK%" 2>nul
+    echo   OK: docs refreshed, index.html restored
+) else (
+    echo   WARN: docs refreshed, no index.html backup found
+)
+
+echo [6/6] Cleaning up...
 rmdir /s /q "%TEMP_DIR%" 2>nul
 
 echo.

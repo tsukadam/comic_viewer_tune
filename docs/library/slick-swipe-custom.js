@@ -1,13 +1,14 @@
 /**
- * カスタム Slick スワイプ処理（斜めスワイプを横のみ扱う）
+ * カスタム Slick スワイプ処理（斜めスワイプを横のみ扱う + タップ判定の統一）
  * Copyright (c) 2026 Kodama Totsuka.
  * Licensed under the MIT License. See License.txt in the project root.
  */
 // カスタム Slick スワイプ処理
 // - jQuery プラグイン $.fn.slick をラップして、初期化時に prototype を差し替える
 // - 斜めスワイプでも Y 成分を常に 0 扱い（curY = startY）にして、常に横スワイプとして解釈させる
-//   ※「origSwipeMove を呼ぶ前に curY を書き換える」だけだと、origSwipeMove 内で curY が上書きされて効かないため、
-//     swipeMove 自体を差し替える（slick v1.9.0 の実装をベースに縦成分を無視）
+// - タップ判定: options.touchTapThreshold（px）で「クリック阻止」の閾値を上書き可能にし、
+//   この閾値以下を「タップ」として $slider に 'slickTouchTap' を発火（clientX, clientY 付き）。
+//   エッジ／中央のめくり・バー表示は comic.js がこのイベントのみで判定する。
 
 (function ($) {
     'use strict';
@@ -25,6 +26,37 @@
 
             var Ctor = inst.constructor;
             if (!Ctor.__swipePatched) {
+                // タップ閾値（px）。この値以下＝タップ、超えた＝ドラッグ（クリック阻止）。スワイプ成立は minSwipe で別。
+                var tapThresholdDefault = 10;
+
+                // swipeEnd: クリック阻止の閾値を touchTapThreshold にし、タップ時に slickTouchTap を発火
+                // タップのみ（touchmove なし）だと swipeLength が未設定なので、離した位置から算出する
+                var origSwipeEnd = Ctor.prototype.swipeEnd;
+                Ctor.prototype.swipeEnd = function (ev) {
+                    var l = this;
+                    var tapThreshold = (l.options.touchTapThreshold != null) ? l.options.touchTapThreshold : tapThresholdDefault;
+                    var cx, cy, releaseX;
+                    if (ev.originalEvent && ev.originalEvent.changedTouches && ev.originalEvent.changedTouches[0]) {
+                        var t = ev.originalEvent.changedTouches[0];
+                        cx = t.clientX;
+                        cy = t.clientY;
+                        releaseX = t.pageX != null ? t.pageX : t.clientX;
+                    } else if (ev.clientX != null) {
+                        cx = ev.clientX;
+                        cy = ev.clientY;
+                        releaseX = ev.clientX;
+                    }
+                    if (l.touchObject.swipeLength == null && l.touchObject.startX != null && releaseX != null) {
+                        l.touchObject.swipeLength = Math.round(Math.abs(releaseX - l.touchObject.startX));
+                    }
+                    var swipeLength = l.touchObject.swipeLength;
+                    var result = origSwipeEnd.call(l, ev);
+                    l.shouldClick = !(swipeLength > tapThreshold);
+                    if (swipeLength <= tapThreshold && cx != null && cy != null)
+                        l.$slider.trigger('slickTouchTap', { clientX: cx, clientY: cy });
+                    return result;
+                };
+
                 // slick v1.9.0 swipeMove をベースに、縦成分を無視する版へ差し替え
                 Ctor.prototype.swipeMove = function (i) {
                     var e, t, o, s, n, r, l = this;

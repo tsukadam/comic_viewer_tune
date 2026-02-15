@@ -20,6 +20,21 @@ $(function(){
     var pageBarHideTimer = null;
     var pageBarTouchStartSlide = null;
     var pageBarCachedHeight = 0;
+
+    // right_to_left: 1=RTL, 0=LTR。leftstart: RTL時 1=見開きまたぎ・0=またがず, LTR時 1=またがず・0=またぎ。未定義時は display で互換。両方ない場合は leftstart=1, right_to_left=1 相当でフォールバック。
+    function readComicConfig() {
+        var rtl = (typeof window.right_to_left !== 'undefined') ? (window.right_to_left === 1) : true;
+        var start;
+        if (typeof window.leftstart !== 'undefined') {
+            start = rtl ? (window.leftstart === 1) : (window.leftstart === 0);
+        } else if (typeof window.display !== 'undefined') {
+            start = (window.display === 0);
+        } else {
+            start = rtl;
+        }
+        return { directionRtl: rtl, spreadCrossingStart: start };
+    }
+    var config = readComicConfig();
     
 // URLのパラメータを取得（?p=n）
     var urlParam = location.search.substring(1);
@@ -37,13 +52,13 @@ $(function(){
     num = num - 1;
     if(width <= BREAKPOINT_PX){
     } else {
-        if(display === 1){ //右ページ始まりの時
+        if (!config.spreadCrossingStart) { // 見開きをまたがない始まり
             if (num % 2 == 0) {// 偶数の処理
             }
             else {// 奇数の処理
                 num = num - 1;
             }
-        }else { //左ページ始まりの時
+        } else { // 見開きまたぎ始まり
             if (num % 2 == 0) {// 偶数の処理
             }
             else {// 奇数の処理
@@ -59,6 +74,11 @@ $(function(){
     var $slider = $('.slider');// 他ファイルからは参照せず、本jsのスコープのみで使用
     var total_minus = 0;
 
+    // タップ vs スワイプの判定は Slick に一元化。この閾値（px）以下＝タップ、超えた＝ドラッグ（クリック阻止）。スワイプ成立は Slick の touchThreshold（minSwipe）で別。
+    var TOUCH_TAP_CONFIG = {
+        tapVsSwipeThresholdPx: 10     // この移動量以下ならタップ、超えたらタップとはみなさない（遊び）。slick-swipe-custom の touchTapThreshold に渡す
+    };
+
     // タップ/クリック反応領域の定義（排他）。数値はここだけ。上部・めくり左右・中央。
     var PAGE_BAR_CONFIG = {
         topZoneY: 100,               // 上部バーの縦幅。表示時に実測で上書き
@@ -68,7 +88,6 @@ $(function(){
         initialShowMs: 1200,         // 初回表示後、この時間でバーを非表示にする（ms）
         idleHideMs: 4000,            // バー表示中の無操作で非表示にするまでの時間（ms）
         afterNavHideMs: 1800,        // ドットでページ遷移後にバーを非表示にするまでの時間。続けて操作するかもしれないので少しだけ待つ（ms）
-        swipeCheckDelayMs: 150,      // タッチがこの秒数以下ならタップ、超えたらスワイプと判定（ms）
         fadeInDurationMs: 350,       // バーのフェードイン時間（ms）
         fadeOutDurationMs: 800,      // バーのフェードアウト時間（ms）
         initialFadeOutDurationMs: 1000,  // バーの初回フェードアウト時間（ms）
@@ -84,6 +103,13 @@ $(function(){
     var ARROW_VISUAL_CONFIG = {
         edgePaddingSinglePx: 20,     // 単ページ時：画面端からの距離（px）
         edgePaddingWidePx: 30        // 見開き時：画面端からの距離（px）
+    };
+    // リロード時の進行アローヒント（一瞬脈打ってフェードアウト）
+    var ARROW_HINT_CONFIG = {
+        delayMs: 400,                // リロードからアニメ開始までの待ち時間（ms）
+        pulseCount: 2,               // 脈打つ回数
+        pulseDurationMs: 350,        // 1回の脈の時間（ms）
+        fadeOutMs: PAGE_BAR_CONFIG.initialFadeOutDurationMs  // 上部バーと同じフェード時間
     };
     // マウスホイール（クリックによるドラッグ/スワイプとは別）のページ送り調整
     var WHEEL_NAV_CONFIG = {
@@ -105,9 +131,32 @@ $(function(){
         return 'center';
     }
     
-    // 見開き時の「右ページ」か（display: 0=左始まり, 1=右始まり。pageNum は 1 始まりのページ番号）
-    function isRightPage(pageNum) {
-        return (display === 0 && pageNum % 2 === 0) || (display === 1 && pageNum % 2 === 1);
+    // 見開き時の「Prev 側のページ」か（RTLでは右側、LTRでは左側に表示される。spreadCrossingStart で偶奇を決める。pageNum は 1 始まり）
+    function isSpreadPrevPage(pageNum) {
+        return (config.spreadCrossingStart && pageNum % 2 === 0) || (!config.spreadCrossingStart && pageNum % 2 === 1);
+    }
+
+    // 読む順の「次」「前」。方向（RTL/LTR）に応じた発火の入れ替えは呼び出し元で行う
+    function goNext() { try { $slider.slick('slickNext'); } catch (err) {} }
+    function goPrev() { try { $slider.slick('slickPrev'); } catch (err) {} }
+    // 左/右ゾーンから goNext か goPrev を呼ぶ（directionRtl で入れ替え）
+    function doNavByEdgeZone(zone) {
+        if (zone === 'left') { if (config.directionRtl) goNext(); else goPrev(); return; }
+        if (zone === 'right') { if (config.directionRtl) goPrev(); else goNext(); }
+    }
+
+    function getFirstSlideIndex() {
+        return ($("#first_page").length > 0) ? 1 : 0;
+    }
+    function getArrowOptions(rtl) {
+        return {
+            prevArrow: rtl ? '<div class="slide-arrow right-arrow"><span></span></div>' : '<div class="slide-arrow left-arrow"><span></span></div>',
+            nextArrow: rtl ? '<div class="slide-arrow left-arrow"><span></span></div>' : '<div class="slide-arrow right-arrow"><span></span></div>'
+        };
+    }
+    function isSinglePageView(w) {
+        var ww = (typeof w !== 'undefined') ? w : $(window).width();
+        return (ww <= BREAKPOINT_PX) || isMobileDevice;
     }
 
     var slickCommonOptions = {
@@ -116,15 +165,17 @@ $(function(){
         accessibility: false,
         dots: true,
         appendDots: $('.dots'),
-        prevArrow: '<div class="slide-arrow prev-arrow"><span></span></div>',
-        nextArrow: '<div class="slide-arrow next-arrow"><span></span></div>',
-        touchThreshold: 10,
+        touchThreshold: 10,           // スワイプ成立（minSwipe = listWidth/これ）。タップ閾値は touchTapThreshold で別
+        touchTapThreshold: TOUCH_TAP_CONFIG.tapVsSwipeThresholdPx,  // この値以下＝タップ（クリック阻止しない）。slick-swipe-custom で使用
         lazyLoad: 'progressive',
-        infinite: false,
-        rtl: true
+        infinite: false
+        // rtl は sliderSetting() 内で毎回 config.directionRtl を渡す（__comicDebugReload 等で変更時に正しく反映するため）
     };
 
     function sliderSetting(){
+        var rtl = config.directionRtl;
+        $slider.attr('dir', rtl ? 'rtl' : 'ltr');
+        $('body').removeClass('comic-rtl comic-ltr').addClass(rtl ? 'comic-rtl' : 'comic-ltr');
         var currentSlide = num;
         var wasInitialized = $slider.hasClass('slick-initialized');
         var wasSinglePage = false;
@@ -139,7 +190,7 @@ $(function(){
         }
 
         var currentWidth = $(window).width();
-        var isSinglePage = (currentWidth <= BREAKPOINT_PX) || isMobileDevice;
+        var isSinglePage = isSinglePageView(currentWidth);
 
         if(isSinglePage){
             if($("#first_page").length > 0){
@@ -153,13 +204,14 @@ $(function(){
                 if(hadFirstPage && currentSlide === 0){
                     currentSlide = currentSlide;
                 } else {
-                    if (isRightPage(page) && currentSlide > 0) {
+                    if (isSpreadPrevPage(page) && currentSlide > 0) {
                         currentSlide = currentSlide;
                     }
                 }
             }
 
-            $slider.slick($.extend({}, slickCommonOptions, {
+            $slider.slick($.extend({}, slickCommonOptions, getArrowOptions(rtl), {
+                rtl: rtl,
                 slidesToShow: 1,
                 slidesToScroll: 1,
                 initialSlide: currentSlide
@@ -167,11 +219,11 @@ $(function(){
             total_minus = 1;
             $('body').addClass('single-page-view');
         } else{ 
-            if(display === 1 && $("#first_page").length > 0){
+            if (!config.spreadCrossingStart && $("#first_page").length > 0){
                 $("#first_page").remove();
                 currentSlide = Math.max(0, currentSlide - 1);
             }
-            if(display === 0 && $("#first_page").length === 0){
+            if (config.spreadCrossingStart && $("#first_page").length === 0){
                 $slider.prepend(firstPageHtml);
                 currentSlide = currentSlide + 1;
             }
@@ -179,14 +231,15 @@ $(function(){
             if (wasInitialized && wasSinglePage) {
                 var hasFirst = ($("#first_page").length > 0);
                 var page = hasFirst ? currentSlide : currentSlide + 1;
-                if (isRightPage(page) && currentSlide > 0) {
+                if (isSpreadPrevPage(page) && currentSlide > 0) {
                     currentSlide = currentSlide;
-                } else if (!isRightPage(page) && currentSlide > 0) {
+                } else if (!isSpreadPrevPage(page) && currentSlide > 0) {
                     currentSlide = currentSlide - 1;
                 }
             }         
             
-            $slider.slick($.extend({}, slickCommonOptions, {
+            $slider.slick($.extend({}, slickCommonOptions, getArrowOptions(rtl), {
+                rtl: rtl,
                 slidesToShow: 2,
                 slidesToScroll: 2,
                 initialSlide: currentSlide
@@ -214,9 +267,9 @@ $(function(){
                 '--arrow-visual-edge-padding': edgePad + 'px'
             });
             $('.current').text(slick.currentSlide + 1);
-            if(display === 1){ //右ページ始まりの時
+            if (!config.spreadCrossingStart) { // 見開きをまたがない
                 $('.total').text(slick.slideCount - total_minus + 1);
-            } else { //左ページ始まりの時
+            } else { // 見開きまたぎ始まり
                 $('.total').text(slick.slideCount - total_minus);
             }
             adsenseOnSetPosition();
@@ -233,13 +286,76 @@ $(function(){
         });
         setTimeout(adsenseOnInit, 0);
     }
- 
+
+//*** アロー関連***
+    // 進行方向ヒント：リロード時に進行アローを一瞬表示してアニメーション
+    var hintArrowTimers = [];
+    var hintArrowCurrentId = 0;
+    function startHintArrowAnimation() {
+        hintArrowCurrentId++;
+        var myId = hintArrowCurrentId;
+        hintArrowTimers.forEach(function(t) { clearTimeout(t); });
+        hintArrowTimers = [];
+        $('body').removeClass('hint-arrow-animating');
+        $('.slide-arrow').removeClass('hint-arrow-target hint-arrow-pulse hint-arrow-fadeout');
+
+        var $nextArrow = config.directionRtl ? $slider.find('.left-arrow') : $slider.find('.right-arrow');
+        if (!$nextArrow.length || $nextArrow.hasClass('slick-disabled')) return;
+
+        var cfg = ARROW_HINT_CONFIG;
+        var t1 = setTimeout(function() {
+            if (myId !== hintArrowCurrentId) return;
+            try { $slider.slick('setPosition'); } catch (e) {}
+            $('body').addClass('hint-arrow-animating');
+            $nextArrow.addClass('hint-arrow-target hint-arrow-pulse').css({
+                '--hint-pulse-duration': cfg.pulseDurationMs + 'ms',
+                '--hint-pulse-count': cfg.pulseCount
+            });
+            var t2 = setTimeout(function() {
+                if (myId !== hintArrowCurrentId) return;
+                $nextArrow.removeClass('hint-arrow-pulse').css({ '--hint-pulse-duration': '', '--hint-pulse-count': '' });
+                $nextArrow.css({ 'transition-property': 'opacity', 'transition-duration': (cfg.fadeOutMs / 1000) + 's' });
+                $nextArrow[0].offsetHeight;
+                $nextArrow.addClass('hint-arrow-fadeout');
+                var t3 = setTimeout(function() {
+                    if (myId !== hintArrowCurrentId) return;
+                    $('body').removeClass('hint-arrow-animating');
+                    $nextArrow.removeClass('hint-arrow-target hint-arrow-fadeout').css({ 'transition-property': '', 'transition-duration': '' });
+                    try { $slider.slick('setPosition'); } catch (e) {}
+                }, cfg.fadeOutMs);
+                hintArrowTimers.push(t3);
+            }, cfg.pulseCount * cfg.pulseDurationMs);
+            hintArrowTimers.push(t2);
+        }, cfg.delayMs);
+        hintArrowTimers.push(t1);
+    }
+    // 矢印ホバー：矢印は pointer-events: none のため、document の mousemove で getTapZone から .hover を付ける（PC のみ）
+    if (!isTouchDevice) {
+        $(document).on('mousemove.arrowHover', function(e) {
+            var z = getTapZone(e.clientX, e.clientY);
+            $('.slide-arrow').removeClass('hover');
+            if (z === 'left') $('.slide-arrow.left-arrow').addClass('hover');
+            else if (z === 'right') $('.slide-arrow.right-arrow').addClass('hover');
+        });
+    }
+
     sliderSetting();
+    startHintArrowAnimation();
+
+    // デバッグ用: コンソールで right_to_left / leftstart を変えたあと __comicDebugReload() で再適用する。カレントは先頭に戻す。
+    window.__comicDebugReload = function() {
+        var next = readComicConfig();
+        config.directionRtl = next.directionRtl;
+        config.spreadCrossingStart = next.spreadCrossingStart;
+        sliderSetting();
+        try { $slider.slick('slickGoTo', getFirstSlideIndex()); } catch(err) {}
+        startHintArrowAnimation();
+    };
     
-    // リサイズ時は「単ページ⇔見開き」が切り替わる時だけ再初期化。それ以外は変化終了 0.5 秒後に再位置合わせ（push はしないので随時発火でもよいが、連続リサイズ時の負荷を抑えるため debounce）。
-    var lastIsSinglePage = (($(window).width() <= BREAKPOINT_PX) || isMobileDevice);
+    // リサイズ時は「単ページ⇔見開き」が切り替わる時だけ再初期化。それ以外は変化終了 0秒後に再位置合わせ
+    var lastIsSinglePage = isSinglePageView();
     $(window).on('resize', function() {
-        var nowIsSinglePage = (($(window).width() <= BREAKPOINT_PX) || isMobileDevice);
+        var nowIsSinglePage = isSinglePageView();
         if (nowIsSinglePage !== lastIsSinglePage) {
             lastIsSinglePage = nowIsSinglePage;
             if (adsenseResizeTimer) { clearTimeout(adsenseResizeTimer); adsenseResizeTimer = null; }
@@ -256,74 +372,82 @@ $(function(){
         }
     });
 
-    // 矢印ホバー：矢印は pointer-events: none のため、document の mousemove で getTapZone から .hover を付ける（PC のみ）
-    if (!isTouchDevice) {
-        $(document).on('mousemove.arrowHover', function(e) {
-            var z = getTapZone(e.clientX, e.clientY);
-            $('.slide-arrow').removeClass('hover');
-            if (z === 'left') $('.slide-arrow.next-arrow').addClass('hover');
-            else if (z === 'right') $('.slide-arrow.prev-arrow').addClass('hover');
-        });
-    }
-
+//*** ページバー関連***
     function isLastPageInteractive(el) { return el && $(el).closest('#last_page').length && $(el).closest('a, button, input').length; }
     var pageBarJustShownByTap = false;  // 表示させるタップで出した直後は、そのタップがバーに届いても遷移させない
     var pageBarJustHiddenByTap = false; // 消すタップ直後のタップが表示させるタップに奪われないようにする
     var pageBarTransitioning = false;   // フェード中に操作をロックする用
+    function handlePageBarTap() {
+        if (!$pageBarOverlay.length) return;
+        if (!$pageBarOverlay.hasClass('page-bar-visible') && !pageBarJustHiddenByTap) { showPageBar(); return; }
+        if ($pageBarOverlay.hasClass('page-bar-visible') && !pageBarJustShownByTap) {
+            pageBarJustHiddenByTap = true;
+            setTimeout(function() { pageBarJustHiddenByTap = false; }, PAGE_BAR_CONFIG.tapFlagResetMs);
+            hidePageBarImmediate();
+        }
+    }
+    var pageBarTransitionEndTimer = null; // フェード終了時に transitioning を外すタイマー。show 時にキャンセルするため保持
+    function runAfterPageBarFade(durationMs, callback) {
+        if (pageBarTransitionEndTimer) { clearTimeout(pageBarTransitionEndTimer); pageBarTransitionEndTimer = null; }
+        pageBarTransitionEndTimer = setTimeout(function() {
+            pageBarTransitionEndTimer = null;
+            callback();
+        }, durationMs);
+    }
     function schedulePageBarHide(delayMs) {
         if (pageBarHideTimer) clearTimeout(pageBarHideTimer);
         var delay = (delayMs === undefined) ? PAGE_BAR_CONFIG.idleHideMs : delayMs;
         pageBarHideTimer = setTimeout(function() {
             if (pageBarTransitioning) return;
             pageBarTransitioning = true;
-            // 消えるとき用のフェード時間に切り替え
             $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.fadeOutDurationMs / 1000) + 's');
             $pageBarOverlay.removeClass('page-bar-visible');
             $body.removeClass('page-bar-open');
             pageBarHideTimer = null;
-            setTimeout(function() {
+            runAfterPageBarFade(PAGE_BAR_CONFIG.fadeOutDurationMs, function() {
                 pageBarTransitioning = false;
-                // 次に出すときのためにフェード時間を fadeIn に戻す
                 $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.fadeInDurationMs / 1000) + 's');
-            }, PAGE_BAR_CONFIG.fadeOutDurationMs);
+            });
         }, delay);
     }
     function showPageBar() {
+        if (pageBarTransitionEndTimer) { clearTimeout(pageBarTransitionEndTimer); pageBarTransitionEndTimer = null; }
+        if (pageBarHideTimer) { clearTimeout(pageBarHideTimer); pageBarHideTimer = null; }
         pageBarTransitioning = true;
         $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.fadeInDurationMs / 1000) + 's');
         $pageBarOverlay.addClass('page-bar-visible');
         $body.addClass('page-bar-open');
-        setTimeout(function() { pageBarTransitioning = false; }, PAGE_BAR_CONFIG.fadeInDurationMs);
+        runAfterPageBarFade(PAGE_BAR_CONFIG.fadeInDurationMs, function() { pageBarTransitioning = false; });
         pageBarJustShownByTap = true;
         setTimeout(function() { pageBarJustShownByTap = false; }, PAGE_BAR_CONFIG.tapFlagResetMs);
         schedulePageBarHide();
         setTimeout(function() { pageBarCachedHeight = $pageBarOverlay.outerHeight(); }, 0);
     }
     function hidePageBarImmediate() {
+        if (pageBarTransitionEndTimer) { clearTimeout(pageBarTransitionEndTimer); pageBarTransitionEndTimer = null; }
         pageBarTransitioning = true;
         $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.fadeOutDurationMs / 1000) + 's');
         $pageBarOverlay.removeClass('page-bar-visible');
         $body.removeClass('page-bar-open');
         if (pageBarHideTimer) { clearTimeout(pageBarHideTimer); pageBarHideTimer = null; }
-        setTimeout(function() {
+        runAfterPageBarFade(PAGE_BAR_CONFIG.fadeOutDurationMs, function() {
             pageBarTransitioning = false;
             $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.fadeInDurationMs / 1000) + 's');
-        }, PAGE_BAR_CONFIG.fadeOutDurationMs);
+        });
     }
-    if ($pageBarOverlay.length) {
-        // 通常は「出るとき」のフェード時間を設定しておき、消えるときに fadeOutDurationMs に切り替える
+    function initPageBar() {
         $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.fadeInDurationMs / 1000) + 's');
         setTimeout(function() {
             if (pageBarTransitioning) return;
             pageBarTransitioning = true;
-            pageBarCachedHeight = $pageBarOverlay.outerHeight(); 
+            pageBarCachedHeight = $pageBarOverlay.outerHeight();
             $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.initialFadeOutDurationMs / 1000) + 's');
             $pageBarOverlay.removeClass('page-bar-visible');
             $body.removeClass('page-bar-open');
-            setTimeout(function() {
-                $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.fadeInDurationMs / 1000) + 's');
+            runAfterPageBarFade(PAGE_BAR_CONFIG.initialFadeOutDurationMs, function() {
                 pageBarTransitioning = false;
-            }, PAGE_BAR_CONFIG.initialFadeOutDurationMs);
+                $pageBarOverlay.css('transition-duration', (PAGE_BAR_CONFIG.fadeInDurationMs / 1000) + 's');
+            });
         }, PAGE_BAR_CONFIG.initialShowMs);
         $pageBarOverlay.find('.page-bar-backdrop').on('click touchend', function(e) {
             e.preventDefault();
@@ -337,7 +461,6 @@ $(function(){
             e.stopPropagation();
             schedulePageBarHide();
         });
-        // 表示させるタップで出した直後は、そのタップがバー内に届いても遷移しないよう吸収する
         $pageBarOverlay[0].addEventListener('click', function(e) {
             if (pageBarJustShownByTap && $(e.target).closest('.page-bar-box').length) {
                 e.preventDefault();
@@ -356,27 +479,49 @@ $(function(){
             if ($pageBarOverlay.hasClass('page-bar-visible')) {
                 schedulePageBarHide(PAGE_BAR_CONFIG.afterNavHideMs);
             }
-            // 遷移後にホバーを外す（タッチで「最後にタップした位置にカーソル」のように mouseover が残り mouseleave が来ないことがあるため）
             $('.slide-arrow').removeClass('hover');
+        });
+    }
+    if ($pageBarOverlay.length) { initPageBar(); }
+
+    function initPageBarPC() {
+        document.addEventListener('click', function(e) {
+            if (isLastPageInteractive(e.target)) return;
+            if (getTapZone(e.clientX, e.clientY) === 'top' && !$(e.target).closest('.page-bar-overlay').length) {
+                var wasVisible = $pageBarOverlay.hasClass('page-bar-visible');
+                handlePageBarTap();
+                if (!wasVisible && $pageBarOverlay.hasClass('page-bar-visible')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }
+        }, true);
+        $(document).on('click.pageBar', function(e) {
+            if (isLastPageInteractive(e.target)) return;
+            if ($(e.target).closest('.slider').length && !$(e.target).closest('.page-bar-overlay').length) {
+                var z = getTapZone(e.clientX, e.clientY);
+                if (z === 'left' || z === 'right') { doNavByEdgeZone(z); return; }
+            }
+            var tapZone = getTapZone(e.clientX, e.clientY);
+            if (tapZone === 'top' || tapZone === 'center') { handlePageBarTap(); return; }
         });
     }
 
 //***ボタン動作***
-    //もう一度読むボタン
-    $(".b_button").on('click', function(e){
+    //もう一度読むボタン（委譲＋touchend で LTR/タッチでも確実に発火）
+    $(document).on('click', '.b_button', function(e){
         e.preventDefault();
-        // 見開き表示で first_page（空の調整ページ）がある場合、実際の1ページ目は index 1
-        var targetIndex = ($("#first_page").length > 0) ? 1 : 0;
-        try { $slider.slick('slickGoTo', targetIndex); } catch(err) {}
+        try { $slider.slick('slickGoTo', getFirstSlideIndex()); } catch(err) {}
+    });
+    $(document).on('touchend', '.b_button', function(e){
+        e.preventDefault();
+        try { $slider.slick('slickGoTo', getFirstSlideIndex()); } catch(err) {}
     });
 
-//***キーボード操作***
+//***キーボード操作***（方向で発火入れ替え: RTL は 37=次・39=前、LTR は 39=次・37=前）
     $(document).keydown(function(e) {
-        if (e.keyCode === 39) {
-            $slider.slick('slickPrev');
-        } else if (e.keyCode === 37) {
-            $slider.slick('slickNext');
-        }
+        if (e.keyCode === 39) { if (config.directionRtl) goPrev(); else goNext(); return; }
+        if (e.keyCode === 37) { if (config.directionRtl) goNext(); else goPrev(); }
     });
 
 //***マウスホイール操作（ページ送り）***
@@ -404,8 +549,8 @@ $(function(){
             setTimeout(function() { wheelNavLocked = false; }, WHEEL_NAV_CONFIG.cooldownMs);
 
             // 下方向スクロール＝次ページ（進む）に統一
-            if (forward) $slider.slick('slickNext');
-            else $slider.slick('slickPrev');
+            if (forward) goNext();
+            else goPrev();
         }, { passive: false });
     }
 
@@ -426,6 +571,18 @@ $(function(){
     var adsenseSlotWidthBeforePush = 0; // ensureAdSlotSize で設定した幅。push 後に再適用。updateAdSlotVisibility の表示判定で参照するためクロージャで保持
     var ADSENSE_SLOT_BUFFER_PER_SIDE_PX = 5; // 左右それぞれこの px 分、アドセンスに渡す幅を小さくする
     var ADSENSE_SLOT_OFFSCREEN = '9999px';    // 非表示時は position で画面外へ（visibility は子要素で効かないため）
+
+    function moveAdSlotOffscreen(slot) {
+        if (!slot) return;
+        slot.style.position = 'fixed';
+        slot.style.left = ADSENSE_SLOT_OFFSCREEN;
+        slot.style.top = ADSENSE_SLOT_OFFSCREEN;
+    }
+    function getAdsenseInsHeight(ins, slot) {
+        if (ins && ins.offsetHeight > 0) return ins.offsetHeight;
+        if (ins && ins.getBoundingClientRect().height > 0) return ins.getBoundingClientRect().height;
+        return (slot && (slot.offsetHeight || slot.getBoundingClientRect().height)) || ADSENSE_SLOT_DEFAULT_HEIGHT_PX;
+    }
 
     function clearAdsenseRetry() {
         if (adsenseRetryTimer) { clearTimeout(adsenseRetryTimer); adsenseRetryTimer = null; }
@@ -470,11 +627,7 @@ $(function(){
         var slot = document.getElementById('adsense-slot');
         if (!container || !slot) return;
         var ins = getAdsenseIns();
-        // 実際の広告（ins要素）の高さを優先的に取得。取得できない場合はslot要素の高さを使用
-        var slotH = (ins && ins.offsetHeight > 0) ? ins.offsetHeight : 
-                    (ins && ins.getBoundingClientRect().height > 0) ? ins.getBoundingClientRect().height :
-                    (slot.offsetHeight || slot.getBoundingClientRect().height || ADSENSE_SLOT_DEFAULT_HEIGHT_PX);
-        container.style.minHeight = slotH + 'px';
+        container.style.minHeight = getAdsenseInsHeight(ins, slot) + 'px';
         var rect = container.getBoundingClientRect();
         slot.style.position = 'fixed';
         slot.style.left = rect.left + 'px';
@@ -504,15 +657,11 @@ $(function(){
             if (showOnContainer) {
                 positionSlotOverAdSpacer();
             } else {
-                slot.style.position = 'fixed';
-                slot.style.left = ADSENSE_SLOT_OFFSCREEN;
-                slot.style.top = ADSENSE_SLOT_OFFSCREEN;
+                moveAdSlotOffscreen(slot);
                 if (container && (!adReady || (onLast && !wideEnough))) container.style.minHeight = '0';
             }
         } catch (e) {
-            slot.style.position = 'fixed';
-            slot.style.left = ADSENSE_SLOT_OFFSCREEN;
-            slot.style.top = ADSENSE_SLOT_OFFSCREEN;
+            moveAdSlotOffscreen(slot);
             if (container) container.style.minHeight = '0';
         }
     }
@@ -533,12 +682,7 @@ $(function(){
                 var slotW = adsenseSlotWidthBeforePush > 0 ? adsenseSlotWidthBeforePush : (slot.getBoundingClientRect().width || ADSENSE_SLOT_DEFAULT_WIDTH_PX);
                 var wideEnough = containerW >= slotW;
                 if (wideEnough) {
-                    var ins = getAdsenseIns();
-                    // 実際の広告（ins要素）の高さを優先的に取得。取得できない場合はslot要素の高さを使用
-                    var slotH = (ins && ins.offsetHeight > 0) ? ins.offsetHeight : 
-                                (ins && ins.getBoundingClientRect().height > 0) ? ins.getBoundingClientRect().height :
-                                (slot.offsetHeight || slot.getBoundingClientRect().height || ADSENSE_SLOT_DEFAULT_HEIGHT_PX);
-                    container.style.minHeight = slotH + 'px';
+                    container.style.minHeight = getAdsenseInsHeight(getAdsenseIns(), slot) + 'px';
                 }
             }
             updateAdSlotVisibility();
@@ -620,12 +764,7 @@ $(function(){
         var lastPageVisibleNow = lastSlideIndex >= currentSlide && lastSlideIndex < currentSlide + n;
         var lastPageVisibleAfter = lastSlideIndex >= nextSlide && lastSlideIndex < nextSlide + n;
         if (lastPageVisibleNow && !lastPageVisibleAfter) {
-            var slot = document.getElementById('adsense-slot');
-            if (slot) {
-                slot.style.position = 'fixed';
-                slot.style.left = ADSENSE_SLOT_OFFSCREEN;
-                slot.style.top = ADSENSE_SLOT_OFFSCREEN;
-            }
+            moveAdSlotOffscreen(document.getElementById('adsense-slot'));
         }
     }
     // 最終ページから離れるめくり後の処理。
@@ -667,10 +806,9 @@ $(function(){
     }
 
 //***端末別処理***
-    if(agent.search(/iPhone/) != -1 || agent.search(/iPad/) != -1 || agent.search(/iPod/) != -1 || agent.search(/Android/) != -1 || (agent.search(/Macintosh/) != -1 && 'ontouchend' in document)){
+    if (isTouchDevice) {
         // スマホ・タブレット時
         $(".sp_none").hide();
-        var edgeTapStartX = 0, edgeTapStartY = 0;
         var pinchActive = false;
         var pinchStartDist = 0;
         var pinchScale = 1;
@@ -709,6 +847,14 @@ $(function(){
             pinchTranslateX = Math.max(b.txMin, Math.min(b.txMax, pinchTranslateX));
             pinchTranslateY = Math.max(b.tyMin, Math.min(b.tyMax, pinchTranslateY));
         }
+        function applyPinchTransform() {
+            var transformValue = (pinchScale === 1 && pinchTranslateX === 0 && pinchTranslateY === 0)
+                ? "" : "translate(" + pinchTranslateX + "px," + pinchTranslateY + "px) scale(" + pinchScale + ")";
+            $slider.css({
+                transform: transformValue,
+                "transform-origin": pinchOriginXPercent + "% " + pinchOriginYPercent + "%"
+            });
+        }
 
         // 単指：端タップ判定、複数指：ピンチ開始
         $(".slider").on("touchstart.edgeTapPinch", function(e) {
@@ -716,10 +862,7 @@ $(function(){
             if (!touches || touches.length === 0) return;
 
             if (touches.length === 1) {
-                // 端タップ用に記録
-                edgeTapStartX = touches[0].clientX;
-                edgeTapStartY = touches[0].clientY;
-                // 拡大中のパン開始位置も記録
+                // 拡大中のパン開始位置を記録
                 panStartX = touches[0].clientX;
                 panStartY = touches[0].clientY;
                 panStartTX = pinchTranslateX;
@@ -762,14 +905,7 @@ $(function(){
 
             // ピンチ開始時の中心を transform-origin として固定して拡大縮小
 
-            // スライダー全体を transform で拡大縮小（レイアウトはそのまま）
-            var transformValue = (pinchScale === 1 && pinchTranslateX === 0 && pinchTranslateY === 0)
-                ? ""
-                : "translate(" + pinchTranslateX + "px," + pinchTranslateY + "px) scale(" + pinchScale + ")";
-            $slider.css({
-                transform: transformValue,
-                "transform-origin": pinchOriginXPercent + "% " + pinchOriginYPercent + "%"
-            });
+            applyPinchTransform();
 
             // ズームに入ったタイミングで Slick のスワイプを無効化
             if (!pinchZoomMode && pinchScale > 1.01) {
@@ -834,16 +970,9 @@ $(function(){
                         duration: PINCH_PAN_CONFIG.snapBackDurationMs,
                             easing: "swing",
                             step: function(now, fx) {
-                                if (fx.prop === "tx") {
-                                    pinchTranslateX = now;
-                                } else if (fx.prop === "ty") {
-                                    pinchTranslateY = now;
-                                }
-                                var transformValue = "translate(" + pinchTranslateX + "px," + pinchTranslateY + "px) scale(" + pinchScale + ")";
-                                $slider.css({
-                                    transform: transformValue,
-                                    "transform-origin": pinchOriginXPercent + "% " + pinchOriginYPercent + "%"
-                                });
+                                if (fx.prop === "tx") pinchTranslateX = now;
+                                else if (fx.prop === "ty") pinchTranslateY = now;
+                                applyPinchTransform();
                             },
                             complete: function() {
                                 pinchTranslateX = targetX;
@@ -854,19 +983,18 @@ $(function(){
                 }
             }
 
-            // 単指で「一定以下ならタップ・それ以外はスワイプ」：移動量 10px 未満ならめくりタップ（左/右で前後送り）
-            if (!pinchZoomMode && pinchScale <= pinchMinScale + 0.01 &&
-                changed.length === 1 && (!touches || touches.length === 0)) {
-                if (isLastPageInteractive(e.target)) return;
-                var releaseX = changed[0].clientX, releaseY = changed[0].clientY;
-                var dx = releaseX - edgeTapStartX;
-                var dy = releaseY - edgeTapStartY;
-                if (Math.sqrt(dx * dx + dy * dy) >= 10) return;
-                var edgeZone = getTapZone(releaseX, releaseY);
-                if (edgeZone === 'top') return;
-                if (edgeZone === 'left') { $slider.slick("slickNext"); }
-                else if (edgeZone === 'right') { $slider.slick("slickPrev"); }
-            }
+            // めくりタップは Slick のタップ判定（slickTouchTap）に一元化。ここでは行わない。
+        });
+
+        // タップ判定は Slick に一元化。slick-swipe-custom が touchTapThreshold 以下をタップとして発火する
+        $slider.off('slickTouchTap.comic').on('slickTouchTap.comic', function (e, data) {
+            if (!data || data.clientX == null) return;
+            if (pinchZoomMode) return;
+            var target = document.elementFromPoint(data.clientX, data.clientY);
+            if (isLastPageInteractive(target)) return;
+            var zone = getTapZone(data.clientX, data.clientY);
+            if (zone === 'left' || zone === 'right') { doNavByEdgeZone(zone); return; }
+            if ((zone === 'top' || zone === 'center') && $pageBarOverlay.length) { handlePageBarTap(); }
         });
 
         // 拡大モード以外：スライダー上ではデフォルトのタッチ操作を無効化
@@ -900,105 +1028,16 @@ $(function(){
                     } else {
                         pinchTranslateY = proposedY;
                     }
-                    var transformValue = "translate(" + pinchTranslateX + "px," + pinchTranslateY + "px) scale(" + pinchScale + ")";
-                    $slider.css({
-                        transform: transformValue,
-                        "transform-origin": pinchOriginXPercent + "% " + pinchOriginYPercent + "%"
-                    });
+                    applyPinchTransform();
                 }
                 e.preventDefault();
             }, { passive: false });
         });
 
-        // バー表示タップ
-        if ($pageBarOverlay.length) {
-            $(document).on('touchstart.pageBar', function(e) {
-                if (isLastPageInteractive(e.target)) return;
-                var touches = e.originalEvent.touches;
-                if (!touches || touches.length !== 1) { pageBarTouchStartSlide = null; return; }
-                var t = touches[0];
-                var tapZone = getTapZone(t.clientX, t.clientY);
-                if (tapZone === 'center' || tapZone === 'top') {
-                    try { pageBarTouchStartSlide = $slider.slick('slickCurrentSlide'); } catch(err) { pageBarTouchStartSlide = null; }
-                } else {
-                    pageBarTouchStartSlide = null;
-                }
-            });
-            $(document).on('touchend.pageBar', function(e) {
-                if (isLastPageInteractive(e.target)) return;
-                var ct = e.originalEvent.changedTouches && e.originalEvent.changedTouches[0];
-                if (!ct) return;
-                var tapZone = getTapZone(ct.clientX, ct.clientY);
-                var inTopZone = (tapZone === 'top');
-                var inBarTapArea = (tapZone === 'center');
-                // 上部：バー非表示時はここを最優先
-                if (inTopZone && !pinchZoomMode && !$pageBarOverlay.hasClass('page-bar-visible') && !pageBarJustHiddenByTap) {
-                    var slideAtStart = pageBarTouchStartSlide;
-                    setTimeout(function() {
-                        if ($pageBarOverlay.hasClass('page-bar-visible') || pageBarTransitioning) return;
-                        try {
-                            if ($slider.slick('slickCurrentSlide') === slideAtStart) showPageBar();
-                        } catch(err) {}
-                        pageBarTouchStartSlide = null;
-                    }, PAGE_BAR_CONFIG.swipeCheckDelayMs);
-                    return;
-                }
-                if (inBarTapArea && !pinchZoomMode && !$pageBarOverlay.hasClass('page-bar-visible') && !pageBarJustHiddenByTap) {
-                    var slideAtStart = pageBarTouchStartSlide;
-                    setTimeout(function() {
-                        if ($pageBarOverlay.hasClass('page-bar-visible') || pageBarTransitioning) return;
-                        try {
-                            if ($slider.slick('slickCurrentSlide') === slideAtStart) showPageBar();
-                        } catch(err) {}
-                        pageBarTouchStartSlide = null;
-                    }, PAGE_BAR_CONFIG.swipeCheckDelayMs);
-                } else if (inBarTapArea && ($pageBarOverlay.hasClass('page-bar-visible') || pageBarTransitioning)) {
-                    pageBarJustHiddenByTap = true;
-                    setTimeout(function() { pageBarJustHiddenByTap = false; }, PAGE_BAR_CONFIG.tapFlagResetMs);
-                    hidePageBarImmediate();
-                } else {
-                    pageBarTouchStartSlide = null;
-                }
-            });
-        }
+        // バー表示／非表示のタップは slickTouchTap で一元処理（タップ判定は Slick に委譲）
     } else {
         $(".pc_none").hide();
-
-        if ($pageBarOverlay.length) {
-            document.addEventListener('click', function(e) {
-                if (isLastPageInteractive(e.target)) return;
-                if (!$pageBarOverlay.hasClass('page-bar-visible') && !pageBarJustHiddenByTap &&
-                    getTapZone(e.clientX, e.clientY) === 'top' && !$(e.target).closest('.page-bar-overlay').length) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    showPageBar();
-                }
-            }, true);
-            $(document).on('click.pageBar', function(e) {
-                if (isLastPageInteractive(e.target)) return;
-                // めくり領域へのタップ・クリックで前後送り（矢印は pointer-events: none なのでここで処理）
-                if ($(e.target).closest('.slider').length && !$(e.target).closest('.page-bar-overlay').length) {
-                    var z = getTapZone(e.clientX, e.clientY);
-                    if (z === 'left') { $slider.slick('slickNext'); return; }
-                    if (z === 'right') { $slider.slick('slickPrev'); return; }
-                }
-                var tapZone = getTapZone(e.clientX, e.clientY);
-                var inBarTapArea = (tapZone === 'center');
-                var inTopZone = (tapZone === 'top');
-                if (inTopZone && !$pageBarOverlay.hasClass('page-bar-visible') && !pageBarJustHiddenByTap) {
-                    showPageBar();
-                    return;
-                }
-                if (inBarTapArea && !$pageBarOverlay.hasClass('page-bar-visible') && !pageBarJustHiddenByTap) {
-                    showPageBar();
-                } else if (inBarTapArea && $pageBarOverlay.hasClass('page-bar-visible') && !pageBarTransitioning) {
-                    pageBarJustHiddenByTap = true;
-                    setTimeout(function() { pageBarJustHiddenByTap = false; }, PAGE_BAR_CONFIG.tapFlagResetMs);
-                    hidePageBarImmediate();
-                }
-            });
-        }
-        
+        if ($pageBarOverlay.length) initPageBarPC();
     }
     
 });
