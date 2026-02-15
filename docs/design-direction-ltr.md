@@ -1,4 +1,4 @@
-# めくり方向 LTR 対応の設計メモ（未実装）
+# めくり方向 LTR 対応の設計メモ（一部実施済み）
 
 ## 目的
 コンフィグでフラグを ON にすると、現在の「右→左」（RTL）のページ送りを「左→右」（LTR）に切り替えられるようにする。
@@ -90,15 +90,13 @@
 
 ---
 
-### 3. HTML の dir
+### 3. HTML の dir（実施済み）
 
 | 場所 | 内容 |
 |------|------|
-| 各 index.html の `.slider` | `dir="rtl"` 固定 → `dir="rtl"` / `dir="ltr"` を JS で設定するか、または HTML 側でコンフィグに応じて書き分け。 |
+| 各 index.html の `.slider` | HTML には `dir` を書かない。 |
 
-- 現状は静的に `dir="rtl"`。LTR 時は `.slider` を `dir="ltr"` にしたい。
-- **案 A**: 初期化前に `$('.slider').attr('dir', directionRtl ? 'rtl' : 'ltr');` を 1 行入れる（comic.js 内でコンフィグを読む前提）。
-- **案 B**: テンプレやビルドで HTML を出し分け。運用が簡単なのは案 A。
+- **実施内容**: JS の `sliderSetting()` 先頭で `$slider.attr('dir', config.directionRtl ? 'rtl' : 'ltr')` を設定する。HTML 側では `.slider` に `dir` 属性を指定しない（test/index.html では削除済み）。他 index も同様に HTML から `dir` を削除し、JS のみで制御する方針。
 
 ---
 
@@ -109,9 +107,28 @@
 | comic.js のエッジタップ（タッチ） | `edgeZone === 'left'` → slickNext、`'right'` → slickPrev。LTR 時は逆にしたい。 |
 | comic.js のエッジクリック（PC） | 同様に `z === 'left'` → slickNext、`z === 'right'` → slickPrev。LTR 時は逆。 |
 
-- **方針**: 矢印の「見た目の配置を入れ替える」のではなく、**どのゾーンを押したときに Next を発火させ、どのゾーンで Prev を発火させるか**を方向で入れ替える。LTR 時は「右ゾーン→Next」「左ゾーン→Prev」になる。
-- **実装**: 方向フラグで分岐。例: `var goNext = (directionRtl && zone==='left') || (!directionRtl && zone==='right');` のような 1 変数にまとめ、`goNext ? slickNext() : slickPrev()` で共通化すると変更箇所を減らせる。
-- 該当コード: タッチ側 867–868 行付近、PC 側 982–983 行付近。
+- **重要**: **位置の入れ替えではなく、発火関数の入れ替え**である。つまり「左ゾーンに別の UI を出す」のではなく、「左ゾーンを押したときに Next を発火させるか Prev を発火させるか」を方向で入れ替える。LTR 時は「右ゾーン→Next」「左ゾーン→Prev」になる。
+- **方針**: 矢印の見た目（left-arrow / right-arrow の配置）は変えず、**どのゾーンで goNext を呼び、どのゾーンで goPrev を呼ぶか**だけを方向フラグで決める。
+- **実装**: 共通の goNext / goPrev を使う前提で、`(zone === 'left' && config.directionRtl) || (zone === 'right' && !config.directionRtl)` なら goNext、そうでなければ goPrev、のように「ゾーン→発火」の対応を 1 か所で書く。
+- 該当コード: タッチ側 892–893 行付近、PC 側 1007–1008 行付近。
+
+---
+
+#### NEXT/PREV の共通化（揃えてから発火の入れ替え）
+
+**現状**: 「読む順の次／前」に相当する Slick の `slickNext` / `slickPrev` が、次の 4 箇所で**直接**呼ばれており、共通の関数名や変数は使っていない。
+
+| 捲り方式 | 場所（comic.js 行付近） | 現状の呼び出し |
+|----------|-------------------------|----------------|
+| キー 37/39 | 399–404 | 39→slickPrev、37→slickNext |
+| ホイール | 431–433 | forward→slickNext、else→slickPrev |
+| エッジタップ（タッチ） | 892–893 | left→slickNext、right→slickPrev |
+| エッジクリック（PC） | 1007–1008 | left→slickNext、right→slickPrev |
+
+**方針**:  
+1. **まず名前を揃える**: 「読む順の次」を `goNext()`、「読む順の前」を `goPrev()` のように共通の関数（または `$slider.slick('slickNext')` / `slick('slickPrev')` を包むラッパー）を 1 か所で定義し、上記 4 箇所すべてで `goNext` / `goPrev` を経由するようにする。  
+2. **そのうえで発火の入れ替え**: 方向フラグに応じて「どのゾーン／どのキーで goNext を呼ぶか／goPrev を呼ぶか」だけを入れ替える。  
+これにより「位置の入れ替え」ではなく「発火関数の入れ替え」であることがコード上も明確になり、矢印・エッジ・キーで一貫した扱いになる。
 
 ---
 
@@ -119,7 +136,7 @@
 
 | 場所 | 内容 |
 |------|------|
-| comic.js の keydown（37 / 39） | 現状: 39（右）= slickPrev、37（左）= slickNext。LTR では 39=Next、37=Prev が自然なので、**アローと同様に「どのキーで Next/Prev を発火させるか」を方向で入れ替える**。 |
+| comic.js の keydown（37 / 39） | 現状: 39（右）= slickPrev、37（左）= slickNext。LTR では 39=Next、37=Prev が自然なので、**矢印・エッジと同様に「どのキーで goNext / goPrev を発火させるか」を方向で入れ替える**（発火関数の入れ替え）。 |
 
 ---
 
@@ -137,9 +154,9 @@
 
 | 場所 | 内容 |
 |------|------|
-| comic.js の mousemove.arrowHover | 左ゾーン → .left-arrow に hover、右ゾーン → .right-arrow に hover（位置で決まるのでクラス名の変更は不要）。LTR では左ゾーンで Prev、右ゾーンで Next が発火するので、表示する矢印はそのままでよい。 |
+| comic.js の mousemove.arrowHover | 左ゾーン → .left-arrow に hover、右ゾーン → .right-arrow に hover（**位置で決める**ので、方向で入れ替えない）。 |
 
-- 矢印は LeftArrow / RightArrow（.left-arrow / .right-arrow）にリネーム済み。ホバーは「どのゾーンにどの矢印を表示するか」なので、左ゾーン＝左矢印・右ゾーン＝右矢印のまま。発火だけ方向で入れ替える。
+- 矢印は **位置名**（.left-arrow / .right-arrow）にリネーム済み。ホバーは「左ゾーン＝左矢印・右ゾーン＝右矢印」のまま。**発火だけ**が方向で入れ替わる（左ゾーンで goNext か goPrev かは LTR で逆になる）。見た目の左右を入れ替える必要はない。
 
 ---
 
@@ -216,7 +233,7 @@
 |------|------|
 | comi_style.css | 矢印は**位置**でクラス名を付ける: **.left-arrow**（左側）、**.right-arrow**（右側）。配置は変えない（left-arrow { left: 0 }, right-arrow { right: 0 }）。 |
 
-- 発火の対応は JS で方向フラグに応じて入れ替えるだけ。**矢印の見た目の位置は RTL/LTR で変えない**ので、CSS で LTR 用に左右を入れ替える必要はない。クラス名を next/prev から left/right にしておけば、「Left を押すと direction に応じて Next または Prev」と読みやすくなる。
+- **発火は JS で「発火関数の入れ替え」**（どのゾーンで goNext / goPrev を呼ぶかを方向で決める）。**矢印の見た目の位置は RTL/LTR で変えない**。LTR 用に CSS で左右を入れ替える記述は不要（かつ混乱の元なので書かない）。
 
 ---
 
@@ -234,18 +251,20 @@
 
 ## まとめ：最小変更でやる場合のチェックリスト
 
-1. **コンフィグ**: index.html に `directionRtl`（または同等）を 1 つ追加。
+1. **コンフィグ**: index.html に `right_to_left` / `leftstart`（test では実施済み）。他 index は `display` のままでも comic.js で互換。
 2. **comic.js**  
-   - Slick の `rtl: directionRtl`。  
-   - `.slider` の `dir` を `directionRtl ? 'rtl' : 'ltr'` で設定。  
-   - エッジタップ・エッジクリックで「左/右 → next/prev」を方向で反転。  
-   - キー 37/39 の割り当てを方向で反転。  
-   - 矢印ホバーで left/right に出す矢印（next/prev）を方向で反転。  
-   - `sliderSetting()` の first_page の prepend/remove 条件を、LTR のとき display の意味を逆にして分岐。
-3. **comi_style.css**: LTR 時のみ .next-arrow / .prev-arrow の左右を入れ替え（body か .slider のクラスで制御）。
-4. **slick-swipe-custom.js**: 触らない（Slick の rtl に任せる）。
-5. **ページバー**: 特になし（rtl に連動する想定）。
-6. **初期 num 補正**: まずはそのまま。不具合が出たら検討。
+   - Slick の `rtl: config.directionRtl`。  
+   - `.slider` の `dir` を JS で設定（**3 は実施済み**：HTML には書かない）。  
+   - **NEXT/PREV の共通化**: キー・ホイール・エッジタップ・エッジクリックの 4 箇所で、いったん `goNext()` / `goPrev()` に揃えてから、**発火関数の入れ替え**（どのゾーン／どのキーで goNext か goPrev かを方向で決める）を実装する。位置の入れ替えではない。  
+   - エッジタップ・エッジクリック：左/右ゾーン → goNext / goPrev の対応を方向で反転。  
+   - キー 37/39：どのキーで goNext / goPrev を呼ぶかを方向で反転。  
+   - 矢印は位置名（.left-arrow / .right-arrow）のまま。ホバーは左ゾーン＝左矢印・右ゾーン＝右矢印で変更なし。発火だけ上記の共通ロジックで方向に応じて入れ替わる。  
+   - `sliderSetting()` の first_page の prepend/remove 条件を `spreadCrossingStart` で分岐（実施済み）。
+3. **HTML の dir**: 実施済み。HTML には `dir` を書かず、JS の `sliderSetting()` で `.slider` に設定する。
+4. **comi_style.css**: 矢印の**左右の位置は入れ替えない**。LTR 用に「左右を入れ替え」する記述は書かない（発火は JS で発火関数の入れ替えのみ）。
+5. **slick-swipe-custom.js**: 触らない（Slick の rtl に任せる）。
+6. **ページバー**: 特になし（rtl に連動する想定）。
+7. **初期 num 補正**: まずはそのまま。不具合が出たら検討。
 
 この範囲で、「フラグ 1 つで RTL/LTR を切り替える」設計にできる。
 

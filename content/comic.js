@@ -73,6 +73,11 @@ $(function(){
     var $slider = $('.slider');// 他ファイルからは参照せず、本jsのスコープのみで使用
     var total_minus = 0;
 
+    // タップ vs スワイプの判定は Slick に一元化。この閾値（px）以下＝タップ、超えた＝ドラッグ（クリック阻止）。スワイプ成立は Slick の touchThreshold（minSwipe）で別。
+    var TOUCH_TAP_CONFIG = {
+        tapVsSwipeThresholdPx: 10     // この移動量以下ならタップ、超えたらタップとはみなさない（遊び）。slick-swipe-custom の touchTapThreshold に渡す
+    };
+
     // タップ/クリック反応領域の定義（排他）。数値はここだけ。上部・めくり左右・中央。
     var PAGE_BAR_CONFIG = {
         topZoneY: 100,               // 上部バーの縦幅。表示時に実測で上書き
@@ -82,7 +87,6 @@ $(function(){
         initialShowMs: 1200,         // 初回表示後、この時間でバーを非表示にする（ms）
         idleHideMs: 4000,            // バー表示中の無操作で非表示にするまでの時間（ms）
         afterNavHideMs: 1800,        // ドットでページ遷移後にバーを非表示にするまでの時間。続けて操作するかもしれないので少しだけ待つ（ms）
-        swipeCheckDelayMs: 150,      // タッチがこの秒数以下ならタップ、超えたらスワイプと判定（ms）
         fadeInDurationMs: 350,       // バーのフェードイン時間（ms）
         fadeOutDurationMs: 800,      // バーのフェードアウト時間（ms）
         initialFadeOutDurationMs: 1000,  // バーの初回フェードアウト時間（ms）
@@ -132,7 +136,8 @@ $(function(){
         appendDots: $('.dots'),
         prevArrow: '<div class="slide-arrow right-arrow"><span></span></div>',
         nextArrow: '<div class="slide-arrow left-arrow"><span></span></div>',
-        touchThreshold: 10,
+        touchThreshold: 10,           // スワイプ成立（minSwipe = listWidth/これ）。タップ閾値は touchTapThreshold で別
+        touchTapThreshold: TOUCH_TAP_CONFIG.tapVsSwipeThresholdPx,  // この値以下＝タップ（クリック阻止しない）。slick-swipe-custom で使用
         lazyLoad: 'progressive',
         infinite: false,
         rtl: config.directionRtl
@@ -695,7 +700,6 @@ $(function(){
     if(agent.search(/iPhone/) != -1 || agent.search(/iPad/) != -1 || agent.search(/iPod/) != -1 || agent.search(/Android/) != -1 || (agent.search(/Macintosh/) != -1 && 'ontouchend' in document)){
         // スマホ・タブレット時
         $(".sp_none").hide();
-        var edgeTapStartX = 0, edgeTapStartY = 0;
         var pinchActive = false;
         var pinchStartDist = 0;
         var pinchScale = 1;
@@ -741,10 +745,7 @@ $(function(){
             if (!touches || touches.length === 0) return;
 
             if (touches.length === 1) {
-                // 端タップ用に記録
-                edgeTapStartX = touches[0].clientX;
-                edgeTapStartY = touches[0].clientY;
-                // 拡大中のパン開始位置も記録
+                // 拡大中のパン開始位置を記録
                 panStartX = touches[0].clientX;
                 panStartY = touches[0].clientY;
                 panStartTX = pinchTranslateX;
@@ -879,18 +880,26 @@ $(function(){
                 }
             }
 
-            // 単指で「一定以下ならタップ・それ以外はスワイプ」：移動量 10px 未満ならめくりタップ（左/右で前後送り）
-            if (!pinchZoomMode && pinchScale <= pinchMinScale + 0.01 &&
-                changed.length === 1 && (!touches || touches.length === 0)) {
-                if (isLastPageInteractive(e.target)) return;
-                var releaseX = changed[0].clientX, releaseY = changed[0].clientY;
-                var dx = releaseX - edgeTapStartX;
-                var dy = releaseY - edgeTapStartY;
-                if (Math.sqrt(dx * dx + dy * dy) >= 10) return;
-                var edgeZone = getTapZone(releaseX, releaseY);
-                if (edgeZone === 'top') return;
-                if (edgeZone === 'left') { $slider.slick("slickNext"); }
-                else if (edgeZone === 'right') { $slider.slick("slickPrev"); }
+            // めくりタップは Slick のタップ判定（slickTouchTap）に一元化。ここでは行わない。
+        });
+
+        // タップ判定は Slick に一元化。slick-swipe-custom が touchTapThreshold 以下をタップとして発火する
+        $slider.off('slickTouchTap.comic').on('slickTouchTap.comic', function (e, data) {
+            if (!data || data.clientX == null) return;
+            if (pinchZoomMode) return;
+            var target = document.elementFromPoint(data.clientX, data.clientY);
+            if (isLastPageInteractive(target)) return;
+            var zone = getTapZone(data.clientX, data.clientY);
+            if (zone === 'left') { $slider.slick('slickNext'); return; }
+            if (zone === 'right') { $slider.slick('slickPrev'); return; }
+            if ((zone === 'top' || zone === 'center') && $pageBarOverlay.length) {
+                if ($pageBarOverlay.hasClass('page-bar-visible') || pageBarTransitioning) {
+                    pageBarJustHiddenByTap = true;
+                    setTimeout(function () { pageBarJustHiddenByTap = false; }, PAGE_BAR_CONFIG.tapFlagResetMs);
+                    hidePageBarImmediate();
+                } else if (!pageBarJustHiddenByTap) {
+                    showPageBar();
+                }
             }
         });
 
@@ -935,57 +944,7 @@ $(function(){
             }, { passive: false });
         });
 
-        // バー表示タップ
-        if ($pageBarOverlay.length) {
-            $(document).on('touchstart.pageBar', function(e) {
-                if (isLastPageInteractive(e.target)) return;
-                var touches = e.originalEvent.touches;
-                if (!touches || touches.length !== 1) { pageBarTouchStartSlide = null; return; }
-                var t = touches[0];
-                var tapZone = getTapZone(t.clientX, t.clientY);
-                if (tapZone === 'center' || tapZone === 'top') {
-                    try { pageBarTouchStartSlide = $slider.slick('slickCurrentSlide'); } catch(err) { pageBarTouchStartSlide = null; }
-                } else {
-                    pageBarTouchStartSlide = null;
-                }
-            });
-            $(document).on('touchend.pageBar', function(e) {
-                if (isLastPageInteractive(e.target)) return;
-                var ct = e.originalEvent.changedTouches && e.originalEvent.changedTouches[0];
-                if (!ct) return;
-                var tapZone = getTapZone(ct.clientX, ct.clientY);
-                var inTopZone = (tapZone === 'top');
-                var inBarTapArea = (tapZone === 'center');
-                // 上部：バー非表示時はここを最優先
-                if (inTopZone && !pinchZoomMode && !$pageBarOverlay.hasClass('page-bar-visible') && !pageBarJustHiddenByTap) {
-                    var slideAtStart = pageBarTouchStartSlide;
-                    setTimeout(function() {
-                        if ($pageBarOverlay.hasClass('page-bar-visible') || pageBarTransitioning) return;
-                        try {
-                            if ($slider.slick('slickCurrentSlide') === slideAtStart) showPageBar();
-                        } catch(err) {}
-                        pageBarTouchStartSlide = null;
-                    }, PAGE_BAR_CONFIG.swipeCheckDelayMs);
-                    return;
-                }
-                if (inBarTapArea && !pinchZoomMode && !$pageBarOverlay.hasClass('page-bar-visible') && !pageBarJustHiddenByTap) {
-                    var slideAtStart = pageBarTouchStartSlide;
-                    setTimeout(function() {
-                        if ($pageBarOverlay.hasClass('page-bar-visible') || pageBarTransitioning) return;
-                        try {
-                            if ($slider.slick('slickCurrentSlide') === slideAtStart) showPageBar();
-                        } catch(err) {}
-                        pageBarTouchStartSlide = null;
-                    }, PAGE_BAR_CONFIG.swipeCheckDelayMs);
-                } else if (inBarTapArea && ($pageBarOverlay.hasClass('page-bar-visible') || pageBarTransitioning)) {
-                    pageBarJustHiddenByTap = true;
-                    setTimeout(function() { pageBarJustHiddenByTap = false; }, PAGE_BAR_CONFIG.tapFlagResetMs);
-                    hidePageBarImmediate();
-                } else {
-                    pageBarTouchStartSlide = null;
-                }
-            });
-        }
+        // バー表示／非表示のタップは slickTouchTap で一元処理（タップ判定は Slick に委譲）
     } else {
         $(".pc_none").hide();
 
