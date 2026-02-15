@@ -128,6 +128,15 @@ $(function(){
         return (config.spreadCrossingStart && pageNum % 2 === 0) || (!config.spreadCrossingStart && pageNum % 2 === 1);
     }
 
+    // 読む順の「次」「前」。方向（RTL/LTR）に応じた発火の入れ替えは呼び出し元で行う
+    function goNext() { try { $slider.slick('slickNext'); } catch (err) {} }
+    function goPrev() { try { $slider.slick('slickPrev'); } catch (err) {} }
+    // 左/右ゾーンから goNext か goPrev を呼ぶ（directionRtl で入れ替え）
+    function doNavByEdgeZone(zone) {
+        if (zone === 'left') { if (config.directionRtl) goNext(); else goPrev(); return; }
+        if (zone === 'right') { if (config.directionRtl) goPrev(); else goNext(); }
+    }
+
     var slickCommonOptions = {
         // accessibility=true だと Slick が slide の id を slick-slideXX に書き換えるため、
         // #last_page 等の固定 id を維持したいこのビューアでは常に false にする
@@ -139,12 +148,14 @@ $(function(){
         touchThreshold: 10,           // スワイプ成立（minSwipe = listWidth/これ）。タップ閾値は touchTapThreshold で別
         touchTapThreshold: TOUCH_TAP_CONFIG.tapVsSwipeThresholdPx,  // この値以下＝タップ（クリック阻止しない）。slick-swipe-custom で使用
         lazyLoad: 'progressive',
-        infinite: false,
-        rtl: config.directionRtl
+        infinite: false
+        // rtl は sliderSetting() 内で毎回 config.directionRtl を渡す（__comicDebugReload 等で変更時に正しく反映するため）
     };
 
     function sliderSetting(){
-        $slider.attr('dir', config.directionRtl ? 'rtl' : 'ltr');
+        var rtl = config.directionRtl;
+        $slider.attr('dir', rtl ? 'rtl' : 'ltr');
+        $('body').removeClass('comic-rtl comic-ltr').addClass(rtl ? 'comic-rtl' : 'comic-ltr');
         var currentSlide = num;
         var wasInitialized = $slider.hasClass('slick-initialized');
         var wasSinglePage = false;
@@ -180,6 +191,9 @@ $(function(){
             }
 
             $slider.slick($.extend({}, slickCommonOptions, {
+                rtl: rtl,
+                prevArrow: rtl ? '<div class="slide-arrow right-arrow"><span></span></div>' : '<div class="slide-arrow left-arrow"><span></span></div>',
+                nextArrow: rtl ? '<div class="slide-arrow left-arrow"><span></span></div>' : '<div class="slide-arrow right-arrow"><span></span></div>',
                 slidesToShow: 1,
                 slidesToScroll: 1,
                 initialSlide: currentSlide
@@ -207,6 +221,9 @@ $(function(){
             }         
             
             $slider.slick($.extend({}, slickCommonOptions, {
+                rtl: rtl,
+                prevArrow: rtl ? '<div class="slide-arrow right-arrow"><span></span></div>' : '<div class="slide-arrow left-arrow"><span></span></div>',
+                nextArrow: rtl ? '<div class="slide-arrow left-arrow"><span></span></div>' : '<div class="slide-arrow right-arrow"><span></span></div>',
                 slidesToShow: 2,
                 slidesToScroll: 2,
                 initialSlide: currentSlide
@@ -400,13 +417,10 @@ $(function(){
         try { $slider.slick('slickGoTo', targetIndex); } catch(err) {}
     });
 
-//***キーボード操作***
+//***キーボード操作***（方向で発火入れ替え: RTL は 37=次・39=前、LTR は 39=次・37=前）
     $(document).keydown(function(e) {
-        if (e.keyCode === 39) {
-            $slider.slick('slickPrev');
-        } else if (e.keyCode === 37) {
-            $slider.slick('slickNext');
-        }
+        if (e.keyCode === 39) { if (config.directionRtl) goPrev(); else goNext(); return; }
+        if (e.keyCode === 37) { if (config.directionRtl) goNext(); else goPrev(); }
     });
 
 //***マウスホイール操作（ページ送り）***
@@ -434,8 +448,8 @@ $(function(){
             setTimeout(function() { wheelNavLocked = false; }, WHEEL_NAV_CONFIG.cooldownMs);
 
             // 下方向スクロール＝次ページ（進む）に統一
-            if (forward) $slider.slick('slickNext');
-            else $slider.slick('slickPrev');
+            if (forward) goNext();
+            else goPrev();
         }, { passive: false });
     }
 
@@ -890,8 +904,7 @@ $(function(){
             var target = document.elementFromPoint(data.clientX, data.clientY);
             if (isLastPageInteractive(target)) return;
             var zone = getTapZone(data.clientX, data.clientY);
-            if (zone === 'left') { $slider.slick('slickNext'); return; }
-            if (zone === 'right') { $slider.slick('slickPrev'); return; }
+            if (zone === 'left' || zone === 'right') { doNavByEdgeZone(zone); return; }
             if ((zone === 'top' || zone === 'center') && $pageBarOverlay.length) {
                 if ($pageBarOverlay.hasClass('page-bar-visible') || pageBarTransitioning) {
                     pageBarJustHiddenByTap = true;
@@ -963,8 +976,7 @@ $(function(){
                 // めくり領域へのタップ・クリックで前後送り（矢印は pointer-events: none なのでここで処理）
                 if ($(e.target).closest('.slider').length && !$(e.target).closest('.page-bar-overlay').length) {
                     var z = getTapZone(e.clientX, e.clientY);
-                    if (z === 'left') { $slider.slick('slickNext'); return; }
-                    if (z === 'right') { $slider.slick('slickPrev'); return; }
+                    if (z === 'left' || z === 'right') { doNavByEdgeZone(z); return; }
                 }
                 var tapZone = getTapZone(e.clientX, e.clientY);
                 var inBarTapArea = (tapZone === 'center');

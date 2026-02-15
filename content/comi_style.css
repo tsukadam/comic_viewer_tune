@@ -345,12 +345,15 @@ small{
 .page-bar-box .dots{
     margin: 0 auto 0;
 }
-/* バー左＝最終ページ側、右＝1P側にするためドット並びを反転 */
+/* RTL: バー左＝最終ページ側、右＝1P側。LTR: 左＝1P側、右＝最終ページ側。 */
 .page-bar-box .slick-dots{
     flex-direction: row-reverse;
     height: var(--page-bar-dots-height);
     /* ドットの判定領域を上下に少しはみ出させるため、ここだけ overflow を外す */
     overflow: visible;
+}
+.comic-ltr .page-bar-box .slick-dots{
+    flex-direction: row;
 }
 .page-bar-box .slick-dots li button{
     -webkit-tap-highlight-color: transparent;
