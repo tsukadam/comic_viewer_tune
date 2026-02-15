@@ -16,8 +16,8 @@
         var site = "テストサイトアドレス"; //サイトのURL
         var copy = "テスト作者名"; //作者名
         var comment = "テストコメント"; //コメント
-        var right_to_left = 1; // 1=RTL（右→左）, 0=LTR（左→右）
-        var leftstart = 1;    // RTL時: 1=見開きまたぎ, 0=またがず。LTR時: 1=またがず, 0=見開きまたぎ
+        var right_to_left = 1; // 1=RTL（右→左に進む）,  0=LTR（左→右に進む）
+        var leftstart = 1;    // 1=左始まり, 0=右始まり
         /** ここまで **/
         
         $(function(){
@@ -40,7 +40,7 @@
     <div class="slider">
         <div id="first_page"></div>
         <div id="last_page">
-            <div class="last_page_in" dir="ltr">
+            <div class="last_page_in">
                 <div>
                     <!--Adsenseコード追加ゾーンに中身があるとき、ad_spacer内に表示します-->
                     <div class="ad-spacer"></div>

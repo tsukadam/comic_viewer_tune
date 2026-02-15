@@ -21,14 +21,16 @@ $(function(){
     var pageBarTouchStartSlide = null;
     var pageBarCachedHeight = 0;
 
-    // right_to_left: 1=RTL, 0=LTR。leftstart: RTL時 1=見開きまたぎ・0=またがず, LTR時 1=またがず・0=またぎ。未定義時は display で互換。config は __comicDebugReload で再読込可能。
+    // right_to_left: 1=RTL, 0=LTR。leftstart: RTL時 1=見開きまたぎ・0=またがず, LTR時 1=またがず・0=またぎ。未定義時は display で互換。両方ない場合は leftstart=1, right_to_left=1 相当でフォールバック。
     function readComicConfig() {
         var rtl = (typeof window.right_to_left !== 'undefined') ? (window.right_to_left === 1) : true;
         var start;
         if (typeof window.leftstart !== 'undefined') {
             start = rtl ? (window.leftstart === 1) : (window.leftstart === 0);
+        } else if (typeof window.display !== 'undefined') {
+            start = (window.display === 0);
         } else {
-            start = (typeof window.display !== 'undefined' && window.display === 0);
+            start = rtl;
         }
         return { directionRtl: rtl, spreadCrossingStart: start };
     }
